@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to Helm Values Explorer will be documented in this file.
 
@@ -13,3 +13,5 @@ All notable changes to Helm Values Explorer will be documented in this file.
 - **Layout detection optimization**: Skip workspace walk for helmfile and custom+chartPath layouts
 - **Sample chart**: Minimal helmfile layout (dev/staging) for quick testing
 - **Extension icon** and **screenshot** in README
+- **Orphan diagnostics**: Unresolved `.Values` refs → Error; unused value keys → Hint. Config: `excludeOrphanPrefixes`, `orphanDiagnosticsEnabled`
+- **Orphan diagnostics**: Unresolved `.Values` refs (Error), unused value keys (Hint). Config: `excludeOrphanPrefixes`, `orphanDiagnosticsEnabled`

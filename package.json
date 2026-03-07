@@ -21,7 +21,12 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [],
+    "commands": [
+      {
+        "command": "helmValues.refreshDiagnostics",
+        "title": "Helm: Refresh Diagnostics"
+      }
+    ],
     "configuration": {
       "title": "Helm Values Explorer",
       "properties": {
@@ -55,6 +60,11 @@
           },
           "default": [],
           "description": "Value path prefixes to exclude from orphan diagnostics (e.g. global.images)"
+        },
+        "helmValues.orphanDiagnosticsEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable orphan diagnostics (unresolved refs, unused keys)"
         },
         "helmValues.environments": {
           "type": "array",

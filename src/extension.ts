@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { detectLayout } from './layout';
 import { registerHoverProvider } from './hoverProvider';
+import { registerOrphanDiagnostics } from './orphanDiagnostics';
 import {
   getResolvedValues,
   getResolvedValuesCustom,
@@ -70,6 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
   updateStatus();
 
   registerHoverProvider(context);
+  registerOrphanDiagnostics(context);
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(updateStatus),

@@ -254,6 +254,29 @@ export function getValueAtPath(
   return current;
 }
 
+/** Flatten object to dotted leaf paths (e.g. {a: {b: 1}} -> ["a.b"]). */
+export function flattenLeafKeys(
+  obj: Record<string, unknown>,
+  prefix = ''
+): string[] {
+  const result: string[] = [];
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (
+      val !== null &&
+      val !== undefined &&
+      typeof val === 'object' &&
+      !Array.isArray(val)
+    ) {
+      result.push(...flattenLeafKeys(val as Record<string, unknown>, path));
+    } else {
+      result.push(path);
+    }
+  }
+  return result;
+}
+
 /** Load base values only (chart values.yaml). */
 export function getBaseValues(
   workspaceRoot: string,
