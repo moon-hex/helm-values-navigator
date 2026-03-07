@@ -1,18 +1,11 @@
 # Helm Values Explorer
 
-VS Code extension for inspecting Helm values across environments. Hover over `{{ .Values.x.y.z }}` in templates to see resolved values per environment. Orphan detection for unused keys and unresolved refs.
+VS Code extension for inspecting Helm values across environments. Hover over `.Values` references to see resolved values per environment; hover over `include` calls to see template definitions. Orphan detection (Phase 3) planned.
 
 ## Features
 
-- **Hover table**: Hover over `{{ .Values.x.y.z }}` in `templates/**/*.yaml` to see resolved values across all environments. Values that differ from the chart base are **bold**. Missing keys show `⚠ not set`.
-
-## Features
-
-- **Hover table**: Hover over `{{ .Values.x.y.z }}` in `templates/**/*.yaml` to see resolved values across all environments. Values that differ from the base are bolded; missing keys show `⚠ not set`.
-
-## Features
-
-- **Hover table**: Hover over `{{ .Values.x.y.z }}` in `templates/**/*.yaml` → inline table of resolved values across all environments. Values that differ from the base are **bold**; missing keys show `⚠ not set`.
+- **Values hover**: Hover over `{{ .Values.x.y.z }}` in `templates/**/*.{yaml,yml,tpl}` → inline table of resolved values across all environments. Values that differ from the base are **bold**; missing keys show `⚠ not set`.
+- **Template definition hover**: Hover over `{{ include "template.name" . }}` → shows the `define` block source (file + full definition).
 
 ## Supported layouts
 
