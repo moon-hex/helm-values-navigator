@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import * as yaml from 'js-yaml';
 import { detectLayout } from './layout';
 import {
   flattenLeafKeys,
@@ -46,6 +47,49 @@ function isExcluded(pathStr: string, excludePrefixes: string[]): boolean {
   return excludePrefixes.some(
     (p) => pathStr === p || pathStr.startsWith(p + '.')
   );
+}
+
+/** Find the line and character range for a dotted key path in YAML content (block style, object keys only). */
+function findKeyRangeInYaml(
+  content: string,
+  dottedPath: string
+): { line: number; startChar: number; endChar: number } | null {
+  const lines = content.split('\n');
+  const pathParts: string[] = [];
+  const indentStack: number[] = [-1];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineTrimmed = line.trimStart();
+    if (lineTrimmed === '' || lineTrimmed.startsWith('#')) continue;
+
+    const indent = line.length - lineTrimmed.length;
+    const keyMatch = lineTrimmed.match(/^([a-zA-Z0-9_.-]+)\s*:/);
+    if (!keyMatch) continue;
+
+    const key = keyMatch[1];
+    const keyStart = line.indexOf(key);
+    const keyEnd = keyStart + key.length;
+
+    while (indentStack.length > 1 && indent <= indentStack[indentStack.length - 1]) {
+      indentStack.pop();
+      pathParts.pop();
+    }
+
+    pathParts.push(key);
+    indentStack.push(indent);
+
+    const currentPath = pathParts.join('.');
+    if (currentPath === dottedPath) {
+      return { line: i, startChar: keyStart, endChar: keyEnd };
+    }
+
+    if (!dottedPath.startsWith(currentPath + '.')) {
+      pathParts.pop();
+      indentStack.pop();
+    }
+  }
+  return null;
 }
 
 function deepMerge(
@@ -288,24 +332,105 @@ function runDiagnosticsForFolder(
   }
 
   const leafKeys = flattenLeafKeys(allValuesMerged);
-  const unusedKeys = leafKeys.filter((key) => {
-    if (isExcluded(key, config.excludeOrphanPrefixes)) return false;
-    return !Array.from(allReferencedPaths).some(
-      (ref) =>
-        ref === key ||
-        ref.startsWith(key + '.') ||
-        key.startsWith(ref + '.')
-    );
-  });
+  const unusedKeysSet = new Set(
+    leafKeys.filter((key) => {
+      if (isExcluded(key, config.excludeOrphanPrefixes)) return false;
+      return !Array.from(allReferencedPaths).some(
+        (ref) =>
+          ref === key ||
+          ref.startsWith(key + '.') ||
+          key.startsWith(ref + '.')
+      );
+    })
+  );
 
-  if (unusedKeys.length > 0 && fs.existsSync(baseValuesPath)) {
-    const uri = vscode.Uri.file(baseValuesPath);
-    const diag = new vscode.Diagnostic(
-      new vscode.Range(0, 0, 0, 0),
-      `Unused value keys (not referenced in templates): ${unusedKeys.slice(0, 10).join(', ')}${unusedKeys.length > 10 ? ` and ${unusedKeys.length - 10} more` : ''}`,
-      vscode.DiagnosticSeverity.Hint
-    );
-    diagnosticsByUri.set(uri.toString(), [diag]);
+  // Build list of values files with their content and keys (per layout)
+  type ValuesFileEntry = { filePath: string; content: string; keys: string[] };
+  const valuesFiles: ValuesFileEntry[] = [];
+  const resolveTemplate = (t: string, env: string) =>
+    t.replace(/\{\{\s*\.Environment\.Name\s*\}\}/g, env);
+  const isSecretsTemplate = (t: string) =>
+    /secrets\.(yaml|yml)$/i.test(resolveTemplate(t, 'x'));
+
+  // Base values
+  if (fs.existsSync(baseValuesPath)) {
+    const content = fs.readFileSync(baseValuesPath, 'utf8');
+    const parsed = yaml.load(content) as Record<string, unknown> | null;
+    const obj = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+    valuesFiles.push({
+      filePath: baseValuesPath,
+      content,
+      keys: flattenLeafKeys(obj),
+    });
+  }
+
+  if (layout.layout === 'helmfile') {
+    for (const env of envs) {
+      for (const template of layout.valueFileTemplates) {
+        let filePath = path.join(rootPath, resolveTemplate(template, env));
+        if (config.secretsFilePath && isSecretsTemplate(template)) {
+          filePath = path.isAbsolute(config.secretsFilePath)
+            ? config.secretsFilePath
+            : path.join(rootPath, config.secretsFilePath);
+        }
+        if (!fs.existsSync(filePath)) continue;
+        const content = fs.readFileSync(filePath, 'utf8');
+        const parsed = yaml.load(content) as Record<string, unknown> | null;
+        const obj = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+        valuesFiles.push({ filePath, content, keys: flattenLeafKeys(obj) });
+      }
+    }
+  } else if (layout.layout === 'override-folder') {
+    const overridesDir = path.join(chartRoot, config.overridesDir);
+    for (const env of envs) {
+      const yamlPath = path.join(overridesDir, `${env}.yaml`);
+      const ymlPath = path.join(overridesDir, `${env}.yml`);
+      const filePath = fs.existsSync(yamlPath) ? yamlPath : fs.existsSync(ymlPath) ? ymlPath : null;
+      if (!filePath) continue;
+      const content = fs.readFileSync(filePath, 'utf8');
+      const parsed = yaml.load(content) as Record<string, unknown> | null;
+      const obj = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+      valuesFiles.push({ filePath, content, keys: flattenLeafKeys(obj) });
+    }
+  } else if (layout.layout === 'custom') {
+    for (const env of envs) {
+      const filePath = path.join(
+        rootPath,
+        config.valuesBasePath ?? '.',
+        layout.valuesFilePattern.replace(/{env}/g, env)
+      );
+      if (!fs.existsSync(filePath)) continue;
+      const content = fs.readFileSync(filePath, 'utf8');
+      const parsed = yaml.load(content) as Record<string, unknown> | null;
+      const obj = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+      valuesFiles.push({ filePath, content, keys: flattenLeafKeys(obj) });
+    }
+  }
+
+  for (const { filePath, content, keys } of valuesFiles) {
+    const unusedInFile = keys.filter((k) => unusedKeysSet.has(k));
+    if (unusedInFile.length === 0) continue;
+    const uri = vscode.Uri.file(filePath);
+    const diags: vscode.Diagnostic[] = [];
+    for (const key of unusedInFile) {
+      const range = findKeyRangeInYaml(content, key);
+      if (range) {
+        const lines = content.split(/\r?\n/);
+        const lineText = lines[range.line] ?? '';
+        const endChar = lineText.length;
+        diags.push(
+          new vscode.Diagnostic(
+            new vscode.Range(range.line, 0, range.line, endChar),
+            `\`.Values.${key}\` is not referenced in any template`,
+            vscode.DiagnosticSeverity.Information
+          )
+        );
+      }
+    }
+    if (diags.length > 0) {
+      const existing = diagnosticsByUri.get(uri.toString()) ?? [];
+      diagnosticsByUri.set(uri.toString(), [...existing, ...diags]);
+    }
   }
 
   // Update collection for this folder's files
