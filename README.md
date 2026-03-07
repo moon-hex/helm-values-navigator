@@ -13,6 +13,18 @@ VS Code extension for inspecting Helm values across environments. Hover over `.V
 - **Override-folder**: `helm/*/values.yaml` + `helm/*/overrides/*.yaml`. Environments inferred from override filenames.
 - **Custom**: Set `helmValues.environments` and `helmValues.valuesFilePattern` to use explicit env list and a pattern like `values/values-{env}.yml`. Base path via `helmValues.valuesBasePath`. Takes precedence over helmfile/override-folder when both are set.
 
+## Setup & verification
+
+To verify the extension shows **OK** in the Extensions view:
+
+1. Open this repo in VS Code.
+2. Press **F5** and choose **Launch Extension (sample)**.
+3. A new window opens with the `sample/` folder. Extension activates (status bar: "Helm: 2 envs").
+4. In the new window: Extensions → Helm Values Explorer → should show **Enabled** with no warnings.
+5. Hover over `.Values.replicas` in `sample/chart/templates/deployment.yaml` to test.
+
+The `sample/` folder contains a minimal helmfile layout (dev + staging envs) for quick testing.
+
 ## Installation
 
 Package as `.vsix` and install locally:
@@ -32,12 +44,12 @@ npm run compile
 
 ## Testing
 
-Launch the extension against nolo-helm (Extension Development Host):
+**Option A – Sample chart (no external deps):** Press **F5**, choose **Launch Extension (sample)**. Opens `sample/` folder; status bar shows "Helm: 2 envs".
 
+**Option B – nolo-helm:**
 ```powershell
 .\scripts\test-nolo-helm.ps1
 ```
-
 Opens a new VS Code window with the extension loaded. Status bar shows "Helm: N envs" when a chart is detected (e.g. "Helm: 9 envs" for nolo-helm).
 
 ## Settings

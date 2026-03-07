@@ -4,6 +4,12 @@
   "description": "Hover over .Values in Helm templates to see resolved values across environments. Orphan detection for unused keys and unresolved refs.",
   "version": "0.1.0",
   "publisher": "local",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/helm-values-explorer"
+  },
+  "license": "Apache-2.0",
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },

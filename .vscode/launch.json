@@ -2,12 +2,18 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Launch Extension (sample)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["${workspaceFolder}/sample"],
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "preLaunchTask": "npm: compile"
+    },
+    {
       "name": "Launch Extension (nolo-helm)",
       "type": "extensionHost",
       "request": "launch",
-      "args": [
-        "${workspaceFolder}/../nolo-helm/nolo-helm"
-      ],
+      "args": ["${workspaceFolder}/../nolo-helm/nolo-helm"],
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "preLaunchTask": "npm: compile"
     },

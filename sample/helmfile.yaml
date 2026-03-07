@@ -1,0 +1,9 @@
+﻿environments:
+  dev: {}
+  staging: {}
+releases:
+  - name: app
+    chart: ./chart
+    values:
+      - ./chart/values.yaml
+      - ./chart/values/values-{{ .Environment.Name }}.yml
