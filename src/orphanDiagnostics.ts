@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as yaml from 'js-yaml';
 import { detectLayout } from './layout';
+import { getCachedDiagnostics, setCachedDiagnostics } from './valuesCache';
 import {
   flattenLeafKeys,
   getBaseValues,
@@ -198,7 +199,7 @@ function runDiagnosticsForFolder(
     secretsFilePath?: string;
     excludeOrphanPrefixes: string[];
   }
-): void {
+): Map<string, vscode.Diagnostic[]> | undefined {
   const layout = detectLayout(folder, {
     helmfilePath: config.helmfilePath,
     chartPath: config.chartPath,
@@ -208,7 +209,7 @@ function runDiagnosticsForFolder(
     valuesBasePath: config.valuesBasePath,
     valuesFilePattern: config.valuesFilePattern,
   });
-  if (!layout) return;
+  if (!layout) return undefined;
 
   const envs =
     layout.layout === 'helmfile' ||
@@ -224,7 +225,7 @@ function runDiagnosticsForFolder(
   const baseValuesPath = path.join(chartRoot, config.baseValuesFile);
 
   if (!fs.existsSync(templatesDir) || !fs.statSync(templatesDir).isDirectory()) {
-    return;
+    return undefined;
   }
 
   // Collect all template files
@@ -513,6 +514,7 @@ function runDiagnosticsForFolder(
   for (const [uriStr, diags] of diagnosticsByUri) {
     collection.set(vscode.Uri.parse(uriStr), diags);
   }
+  return diagnosticsByUri;
 }
 
 export function registerOrphanDiagnostics(
@@ -531,8 +533,16 @@ export function registerOrphanDiagnostics(
     if (!enabled) return;
 
     for (const folder of folders) {
+      const folderKey = folder.uri.toString();
+      const cachedDiags = getCachedDiagnostics(folderKey);
+      if (cachedDiags) {
+        for (const [uriStr, diags] of cachedDiags) {
+          collection.set(vscode.Uri.parse(uriStr), diags);
+        }
+        continue;
+      }
       const cfg = vscode.workspace.getConfiguration('helmValues', folder.uri);
-      runDiagnosticsForFolder(folder, collection, {
+      const diagsByUri = runDiagnosticsForFolder(folder, collection, {
         helmfilePath: cfg.get<string>('helmfilePath') ?? 'helmfile.yaml',
         chartPath: cfg.get<string>('chartPath'),
         baseValuesFile: cfg.get<string>('baseValuesFile') ?? 'values.yaml',
@@ -543,6 +553,7 @@ export function registerOrphanDiagnostics(
         secretsFilePath: cfg.get<string>('secretsFilePath'),
         excludeOrphanPrefixes: cfg.get<string[]>('excludeOrphanPrefixes') ?? [],
       });
+      if (diagsByUri) setCachedDiagnostics(folderKey, diagsByUri);
     }
   }
 

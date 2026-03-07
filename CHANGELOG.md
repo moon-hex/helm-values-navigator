@@ -7,6 +7,7 @@ All notable changes to Helm Values Navigator will be documented in this file.
 ### Performance
 
 - **Hover cache**: Layout and resolved values are cached for the values hover. Cache invalidates on save of templates, values files, Chart.yaml, helmfile, or overrides; and on helmValues config change. Subsequent hovers are instant after the first.
+- **Diagnostics cache**: Orphan diagnostics results are cached per workspace folder. In multi-root workspaces, saving in one folder only recomputes that folder; others use cached results.
 
 ## [0.1.2] - 2025-03-07
 

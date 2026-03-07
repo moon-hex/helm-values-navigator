@@ -8,7 +8,8 @@ export interface CachedHoverData {
   perEnv: Map<string, { resolved: Record<string, unknown>; overrideOnly: Record<string, unknown> }>;
 }
 
-const cache = new Map<string, CachedHoverData>();
+const hoverCache = new Map<string, CachedHoverData>();
+const diagnosticsCache = new Map<string, Map<string, vscode.Diagnostic[]>>();
 
 function isRelevantForInvalidation(doc: vscode.TextDocument): boolean {
   const p = doc.uri.fsPath;
@@ -25,21 +26,34 @@ function isRelevantForInvalidation(doc: vscode.TextDocument): boolean {
 }
 
 export function getCached(folderUri: string): CachedHoverData | null {
-  return cache.get(folderUri) ?? null;
+  return hoverCache.get(folderUri) ?? null;
 }
 
 export function setCached(folderUri: string, data: CachedHoverData): void {
-  cache.set(folderUri, data);
+  hoverCache.set(folderUri, data);
+}
+
+export function getCachedDiagnostics(folderUri: string): Map<string, vscode.Diagnostic[]> | null {
+  return diagnosticsCache.get(folderUri) ?? null;
+}
+
+export function setCachedDiagnostics(folderUri: string, data: Map<string, vscode.Diagnostic[]>): void {
+  diagnosticsCache.set(folderUri, data);
 }
 
 export function invalidateForDocument(doc: vscode.TextDocument): void {
   if (!isRelevantForInvalidation(doc)) return;
   const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
-  if (folder) cache.delete(folder.uri.toString());
+  if (folder) {
+    const key = folder.uri.toString();
+    hoverCache.delete(key);
+    diagnosticsCache.delete(key);
+  }
 }
 
 export function invalidateAll(): void {
-  cache.clear();
+  hoverCache.clear();
+  diagnosticsCache.clear();
 }
 
 export function registerCacheInvalidation(context: vscode.ExtensionContext): void {
