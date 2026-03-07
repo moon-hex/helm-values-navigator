@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { detectLayout } from './layout';
+import { findTemplateDefinition, getTemplatesDir } from './templateFinder';
 import {
   getBaseValues,
   getResolvedValues,
@@ -10,6 +11,26 @@ import {
 
 // Supports: {{ .Values.x }}, {{.Values.x}}, {{- .Values.x -}}, {{  .Values.x  }}
 const VALUES_PATH_REGEX = /\{\{-?\s*\.Values\.([a-zA-Z0-9_.-]+)\s*-?\}\}/g;
+
+// Supports: {{ include "name" . }}, {{- include "name" . -}}, (include "name" .)
+const INCLUDE_REGEX = /\{\{-?\s*include\s+"([a-zA-Z0-9_.-]+)"\s+[.\$][^}]*-?\}\}|\(\s*include\s+"([a-zA-Z0-9_.-]+)"\s+[.\$][^)]*\)/g;
+
+function extractIncludeTemplateNameAtPosition(
+  document: vscode.TextDocument,
+  position: vscode.Position
+): string | null {
+  const line = document.lineAt(position.line).text;
+  let match: RegExpExecArray | null;
+  INCLUDE_REGEX.lastIndex = 0;
+  while ((match = INCLUDE_REGEX.exec(line)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (position.character >= start && position.character <= end) {
+      return match[1] ?? match[2];
+    }
+  }
+  return null;
+}
 
 function extractValuesPathAtPosition(
   document: vscode.TextDocument,
@@ -42,6 +63,22 @@ function formatValue(val: unknown): string {
 export function registerHoverProvider(context: vscode.ExtensionContext): void {
   const provider: vscode.HoverProvider = {
     provideHover(document, position) {
+      // Check for include first
+      const templateName = extractIncludeTemplateNameAtPosition(document, position);
+      if (templateName) {
+        const templatesDir = getTemplatesDir(document.uri.fsPath);
+        if (templatesDir) {
+          const found = findTemplateDefinition(templateName, templatesDir);
+          if (found) {
+            const md = new vscode.MarkdownString();
+            md.appendMarkdown(`### Template \`${templateName}\`\n\n`);
+            md.appendMarkdown(`*Defined in ${found.file}*\n\n`);
+            md.appendCodeblock(found.content, 'helm');
+            return new vscode.Hover(md);
+          }
+        }
+      }
+
       const path = extractValuesPathAtPosition(document, position);
       if (!path) return null;
 
@@ -130,6 +167,7 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
       [
         { pattern: '**/templates/**/*.yaml' },
         { pattern: '**/templates/**/*.yml' },
+        { pattern: '**/templates/**/*.tpl' },
       ],
       provider
     )
