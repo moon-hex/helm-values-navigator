@@ -12,6 +12,7 @@ import {
   getValueAtPath,
   ValuesResolverContext,
 } from './valuesResolver';
+import { getCached, setCached, type CachedHoverData } from './valuesCache';
 
 // Supports: {{ .Values.x }}, {{- if .Values.x }}, {{- with .Values.x }}, etc.
 const VALUES_PATH_REGEX = /\.Values\.([a-zA-Z0-9_.-]+)/g;
@@ -87,97 +88,112 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
         }
       }
 
-      const path = extractValuesPathAtPosition(document, position);
-      if (!path) return null;
+      const pathStr = extractValuesPathAtPosition(document, position);
+      if (!pathStr) return null;
 
       const folder = vscode.workspace.getWorkspaceFolder(document.uri);
       if (!folder) return null;
 
       const config = vscode.workspace.getConfiguration('helmValues', folder.uri);
-      const layout = detectLayout(folder, {
-        helmfilePath: config.get<string>('helmfilePath') ?? 'helmfile.yaml',
-        chartPath: config.get<string>('chartPath'),
-        baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
-        overridesDir: config.get<string>('overridesDir') ?? 'overrides',
-        environments: config.get<string[]>('environments'),
-        valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
-        valuesFilePattern: config.get<string>('valuesFilePattern'),
-      });
+      let cached: CachedHoverData | null = getCached(folder.uri.toString());
 
-      if (!layout) return null;
+      if (!cached) {
+        const layout = detectLayout(folder, {
+          helmfilePath: config.get<string>('helmfilePath') ?? 'helmfile.yaml',
+          chartPath: config.get<string>('chartPath'),
+          baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
+          overridesDir: config.get<string>('overridesDir') ?? 'overrides',
+          environments: config.get<string[]>('environments'),
+          valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
+          valuesFilePattern: config.get<string>('valuesFilePattern'),
+        });
+        if (!layout) return null;
 
+        const envs =
+          layout.layout === 'helmfile' || layout.layout === 'override-folder' || layout.layout === 'custom'
+            ? layout.environments
+            : ['default'];
+
+        const baseValues = getBaseValues(
+          layout.rootPath,
+          layout.chartPath,
+          config.get<string>('baseValuesFile') ?? 'values.yaml'
+        );
+        const perEnv = new Map<string, { resolved: Record<string, unknown>; overrideOnly: Record<string, unknown> }>();
+        for (const env of envs) {
+          let resolved;
+          let overrideOnly: Record<string, unknown> = {};
+          if (layout.layout === 'helmfile') {
+            const ctx: ValuesResolverContext = {
+              workspaceRoot: layout.rootPath,
+              chartPath: layout.chartPath,
+              baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
+              valueFileTemplates: layout.valueFileTemplates,
+              secretsFilePath: config.get<string>('secretsFilePath'),
+            };
+            resolved = getResolvedValues(ctx, env);
+            overrideOnly = getOverrideOnlyValues(ctx, env);
+          } else if (layout.layout === 'override-folder') {
+            resolved = getResolvedValuesOverrideFolder(
+              layout.rootPath,
+              layout.chartPath,
+              config.get<string>('baseValuesFile') ?? 'values.yaml',
+              config.get<string>('overridesDir') ?? 'overrides',
+              env
+            );
+            overrideOnly = getOverrideOnlyValuesOverrideFolder(
+              layout.rootPath,
+              layout.chartPath,
+              config.get<string>('overridesDir') ?? 'overrides',
+              env
+            );
+          } else if (layout.layout === 'custom') {
+            resolved = getResolvedValuesCustom(
+              layout.rootPath,
+              layout.chartPath,
+              config.get<string>('baseValuesFile') ?? 'values.yaml',
+              layout.valuesBasePath,
+              layout.valuesFilePattern,
+              env
+            );
+            overrideOnly = getOverrideOnlyValuesCustom(
+              layout.rootPath,
+              layout.valuesBasePath,
+              layout.valuesFilePattern,
+              env
+            );
+          } else {
+            const ctx: ValuesResolverContext = {
+              workspaceRoot: layout.rootPath,
+              chartPath: layout.chartPath,
+              baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
+              valueFileTemplates: [],
+            };
+            resolved = getResolvedValues(ctx, env);
+          }
+          perEnv.set(env, { resolved: resolved.values, overrideOnly });
+        }
+        cached = { layout, baseValues, perEnv };
+        setCached(folder.uri.toString(), cached);
+      }
+
+      const { layout, baseValues, perEnv } = cached;
       const envs =
         layout.layout === 'helmfile' || layout.layout === 'override-folder' || layout.layout === 'custom'
           ? layout.environments
           : ['default'];
-
-      const baseValues = getBaseValues(
-        layout.rootPath,
-        layout.chartPath,
-        config.get<string>('baseValuesFile') ?? 'values.yaml'
-      );
-      const baseVal = getValueAtPath(baseValues, path);
+      const baseVal = getValueAtPath(baseValues, pathStr);
 
       const rows: string[] = [];
       for (const env of envs) {
-        let resolved;
-        let overrideOnly: Record<string, unknown> = {};
-        if (layout.layout === 'helmfile') {
-          const ctx: ValuesResolverContext = {
-            workspaceRoot: layout.rootPath,
-            chartPath: layout.chartPath,
-            baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
-            valueFileTemplates: layout.valueFileTemplates,
-            secretsFilePath: config.get<string>('secretsFilePath'),
-          };
-          resolved = getResolvedValues(ctx, env);
-          overrideOnly = getOverrideOnlyValues(ctx, env);
-        } else if (layout.layout === 'override-folder') {
-          resolved = getResolvedValuesOverrideFolder(
-            layout.rootPath,
-            layout.chartPath,
-            config.get<string>('baseValuesFile') ?? 'values.yaml',
-            config.get<string>('overridesDir') ?? 'overrides',
-            env
-          );
-          overrideOnly = getOverrideOnlyValuesOverrideFolder(
-            layout.rootPath,
-            layout.chartPath,
-            config.get<string>('overridesDir') ?? 'overrides',
-            env
-          );
-        } else if (layout.layout === 'custom') {
-          resolved = getResolvedValuesCustom(
-            layout.rootPath,
-            layout.chartPath,
-            config.get<string>('baseValuesFile') ?? 'values.yaml',
-            layout.valuesBasePath,
-            layout.valuesFilePattern,
-            env
-          );
-          overrideOnly = getOverrideOnlyValuesCustom(
-            layout.rootPath,
-            layout.valuesBasePath,
-            layout.valuesFilePattern,
-            env
-          );
-        } else {
-          const ctx: ValuesResolverContext = {
-            workspaceRoot: layout.rootPath,
-            chartPath: layout.chartPath,
-            baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
-            valueFileTemplates: [],
-          };
-          resolved = getResolvedValues(ctx, env);
-        }
-
-        const val = getValueAtPath(resolved.values, path);
+        const { resolved, overrideOnly } = perEnv.get(env) ?? { resolved: {}, overrideOnly: {} };
+        const val = getValueAtPath(resolved, pathStr);
         const formatted = formatValue(val);
         const differs =
           val !== undefined &&
           val !== null &&
           JSON.stringify(val) !== JSON.stringify(baseVal);
-        const isInOverride = getValueAtPath(overrideOnly, path) !== undefined;
+        const isInOverride = getValueAtPath(overrideOnly, pathStr) !== undefined;
 
         let cell: string;
         if (isInOverride && differs) {
@@ -198,7 +214,7 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
 
       const md = new vscode.MarkdownString();
       md.supportHtml = true;
-      md.appendMarkdown(`### \`.Values.${path}\`\n\n`);
+      md.appendMarkdown(`### \`.Values.${pathStr}\`\n\n`);
       md.appendMarkdown(table);
 
       return new vscode.Hover(md);

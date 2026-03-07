@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { detectLayout } from './layout';
 import { registerHoverProvider } from './hoverProvider';
 import { registerOrphanDiagnostics } from './orphanDiagnostics';
+import { registerCacheInvalidation } from './valuesCache';
 import {
   getResolvedValues,
   getResolvedValuesCustom,
@@ -72,6 +73,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerHoverProvider(context);
   registerOrphanDiagnostics(context);
+  registerCacheInvalidation(context);
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(updateStatus),

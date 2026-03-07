@@ -2,6 +2,12 @@
 
 All notable changes to Helm Values Navigator will be documented in this file.
 
+## [0.1.3] - 2025-03-07
+
+### Performance
+
+- **Hover cache**: Layout and resolved values are cached for the values hover. Cache invalidates on save of templates, values files, Chart.yaml, helmfile, or overrides; and on helmValues config change. Subsequent hovers are instant after the first.
+
 ## [0.1.2] - 2025-03-07
 
 ### Performance
