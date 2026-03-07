@@ -83,24 +83,65 @@ export function detectLayout(
   const rootPath = folder.uri.fsPath;
   const rootUri = folder.uri;
 
-  const chartDirs = findChartYamlPaths(folder);
-  if (chartDirs.length === 0) {
-    return null;
+  // 1. Custom with explicit chartPath - no workspace walk
+  if (config.environments?.length && config.valuesFilePattern && config.chartPath) {
+    const chartPathFull = path.join(rootPath, config.chartPath);
+    if (fs.existsSync(path.join(chartPathFull, 'Chart.yaml'))) {
+      const chartPathRel = path.relative(rootPath, chartPathFull).replace(/\\/g, '/');
+      return {
+        layout: 'custom',
+        rootPath,
+        rootUri,
+        workspaceFolder: folder,
+        chartPath: chartPathRel,
+        environments: config.environments,
+        valuesBasePath: config.valuesBasePath ?? '.',
+        valuesFilePattern: config.valuesFilePattern,
+      };
+    }
   }
+
+  // 2. Helmfile - no workspace walk (chart path from helmfile)
+  const helmfileFullPath = path.join(rootPath, config.helmfilePath);
+  if (fs.existsSync(helmfileFullPath)) {
+    const helmfile = parseHelmfile(helmfileFullPath);
+    if (helmfile) {
+      const helmfileChartPath = path.join(
+        path.dirname(helmfileFullPath),
+        helmfile.chartPath
+      );
+      if (fs.existsSync(path.join(helmfileChartPath, 'Chart.yaml'))) {
+        const helmfileChartPathRel = path.relative(rootPath, helmfileChartPath).replace(/\\/g, '/');
+        return {
+          layout: 'helmfile',
+          rootPath,
+          rootUri,
+          workspaceFolder: folder,
+          helmfilePath: helmfileFullPath,
+          chartPath: helmfileChartPathRel,
+          environments: helmfile.environments,
+          valueFileTemplates: helmfile.valueFileTemplates,
+        };
+      }
+    }
+  }
+
+  // 3. Remaining layouts need findChartYamlPaths
+  const chartDirs = findChartYamlPaths(folder);
+  if (chartDirs.length === 0) return null;
 
   let chartPath: string;
   if (config.chartPath) {
     chartPath = path.join(rootPath, config.chartPath);
     if (!fs.existsSync(path.join(chartPath, 'Chart.yaml'))) {
-      chartPath = chartDirs[0]; // Fallback
+      chartPath = chartDirs[0];
     }
   } else {
     chartPath = chartDirs[0];
   }
-
   const chartPathRel = path.relative(rootPath, chartPath).replace(/\\/g, '/');
 
-  // Custom: explicit environments + valuesFilePattern
+  // Custom without chartPath
   if (config.environments?.length && config.valuesFilePattern) {
     return {
       layout: 'custom',
@@ -114,34 +155,7 @@ export function detectLayout(
     };
   }
 
-  const helmfileFullPath = path.join(rootPath, config.helmfilePath);
-  const hasHelmfile = fs.existsSync(helmfileFullPath);
-
-  if (hasHelmfile) {
-    const helmfile = parseHelmfile(helmfileFullPath);
-    if (helmfile) {
-      const helmfileChartPath = path.join(
-        path.dirname(helmfileFullPath),
-        helmfile.chartPath
-      );
-      const chartPathResolved = fs.existsSync(path.join(helmfileChartPath, 'Chart.yaml'))
-        ? helmfileChartPath
-        : chartPath;
-      const helmfileChartPathRel = path.relative(rootPath, chartPathResolved).replace(/\\/g, '/');
-      return {
-        layout: 'helmfile',
-        rootPath,
-        rootUri,
-        workspaceFolder: folder,
-        helmfilePath: helmfileFullPath,
-        chartPath: helmfileChartPathRel,
-        environments: helmfile.environments,
-        valueFileTemplates: helmfile.valueFileTemplates,
-      };
-    }
-  }
-
-  // Override-folder: helm/*/overrides/*.yaml
+  // Override-folder
   const overridesPath = path.join(chartPath, config.overridesDir);
   if (fs.existsSync(overridesPath) && fs.statSync(overridesPath).isDirectory()) {
     const overrideFiles = fs.readdirSync(overridesPath);
