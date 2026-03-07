@@ -2,6 +2,14 @@
 
 All notable changes to Helm Values Navigator will be documented in this file.
 
+## [0.1.2] - 2025-03-07
+
+### Performance
+
+- **Debouncing**: Orphan diagnostics refresh is debounced (400ms) on save to avoid repeated full scans when saving multiple files
+- **Resolver caching**: Resolved values are computed once per environment and reused for both unresolved-ref and unused-key checks (was O(paths × envs) resolver calls, now O(envs))
+- **No refresh on open**: Diagnostics refresh only on save, not on file open, to reduce perceived lag when switching between files
+
 ## [0.1.1] - 2025-03-07
 
 ### Added Subchart Support!

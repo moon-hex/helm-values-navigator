@@ -252,6 +252,48 @@ function runDiagnosticsForFolder(
 
   const { found: dependencies, expectedNames } = getChartDependencies(chartRoot);
 
+  // Pre-compute resolved values once per env (avoids O(paths × envs) resolver calls)
+  const resolvedByEnv = new Map<string, Record<string, unknown>>();
+  for (const env of envs) {
+    let resolved: { values: Record<string, unknown> };
+    if (layout.layout === 'helmfile') {
+      const ctx: ValuesResolverContext = {
+        workspaceRoot: rootPath,
+        chartPath,
+        baseValuesFile: config.baseValuesFile,
+        valueFileTemplates: layout.valueFileTemplates,
+        secretsFilePath: config.secretsFilePath,
+      };
+      resolved = getResolvedValues(ctx, env);
+    } else if (layout.layout === 'override-folder') {
+      resolved = getResolvedValuesOverrideFolder(
+        rootPath,
+        chartPath,
+        config.baseValuesFile,
+        config.overridesDir,
+        env
+      );
+    } else if (layout.layout === 'custom') {
+      resolved = getResolvedValuesCustom(
+        rootPath,
+        chartPath,
+        config.baseValuesFile,
+        layout.valuesBasePath,
+        layout.valuesFilePattern,
+        env
+      );
+    } else {
+      const ctx: ValuesResolverContext = {
+        workspaceRoot: rootPath,
+        chartPath,
+        baseValuesFile: config.baseValuesFile,
+        valueFileTemplates: [],
+      };
+      resolved = getResolvedValues(ctx, env);
+    }
+    resolvedByEnv.set(env, resolved.values);
+  }
+
   // Direction 1: Unresolved refs - paths in templates that exist in no values
   const allReferencedPaths = new Set<string>();
   const diagnosticsByUri = new Map<string, vscode.Diagnostic[]>();
@@ -271,49 +313,9 @@ function runDiagnosticsForFolder(
       allReferencedPaths.add(pathStr);
       if (isExcluded(pathStr, config.excludeOrphanPrefixes)) continue;
 
-      let resolvedInAnyEnv = false;
-      for (const env of envs) {
-        let resolved: { values: Record<string, unknown> };
-        if (layout.layout === 'helmfile') {
-          const ctx: ValuesResolverContext = {
-            workspaceRoot: rootPath,
-            chartPath,
-            baseValuesFile: config.baseValuesFile,
-            valueFileTemplates: layout.valueFileTemplates,
-            secretsFilePath: config.secretsFilePath,
-          };
-          resolved = getResolvedValues(ctx, env);
-        } else if (layout.layout === 'override-folder') {
-          resolved = getResolvedValuesOverrideFolder(
-            rootPath,
-            chartPath,
-            config.baseValuesFile,
-            config.overridesDir,
-            env
-          );
-        } else if (layout.layout === 'custom') {
-          resolved = getResolvedValuesCustom(
-            rootPath,
-            chartPath,
-            config.baseValuesFile,
-            layout.valuesBasePath,
-            layout.valuesFilePattern,
-            env
-          );
-        } else {
-          const ctx: ValuesResolverContext = {
-            workspaceRoot: rootPath,
-            chartPath,
-            baseValuesFile: config.baseValuesFile,
-            valueFileTemplates: [],
-          };
-          resolved = getResolvedValues(ctx, env);
-        }
-        if (getValueAtPath(resolved.values, pathStr) !== undefined) {
-          resolvedInAnyEnv = true;
-          break;
-        }
-      }
+      const resolvedInAnyEnv = Array.from(resolvedByEnv.values()).some(
+        (values) => getValueAtPath(values, pathStr) !== undefined
+      );
       if (!resolvedInAnyEnv) {
         diags.push(
           new vscode.Diagnostic(
@@ -401,43 +403,8 @@ function runDiagnosticsForFolder(
 
   let allValuesMerged: Record<string, unknown> = {};
   for (const env of envs) {
-    let resolved: { values: Record<string, unknown> };
-    if (layout.layout === 'helmfile') {
-      const ctx: ValuesResolverContext = {
-        workspaceRoot: rootPath,
-        chartPath,
-        baseValuesFile: config.baseValuesFile,
-        valueFileTemplates: layout.valueFileTemplates,
-        secretsFilePath: config.secretsFilePath,
-      };
-      resolved = getResolvedValues(ctx, env);
-    } else if (layout.layout === 'override-folder') {
-      resolved = getResolvedValuesOverrideFolder(
-        rootPath,
-        chartPath,
-        config.baseValuesFile,
-        config.overridesDir,
-        env
-      );
-    } else if (layout.layout === 'custom') {
-      resolved = getResolvedValuesCustom(
-        rootPath,
-        chartPath,
-        config.baseValuesFile,
-        layout.valuesBasePath,
-        layout.valuesFilePattern,
-        env
-      );
-    } else {
-      const ctx: ValuesResolverContext = {
-        workspaceRoot: rootPath,
-        chartPath,
-        baseValuesFile: config.baseValuesFile,
-        valueFileTemplates: [],
-      };
-      resolved = getResolvedValues(ctx, env);
-    }
-    allValuesMerged = deepMerge(allValuesMerged, resolved.values);
+    const values = resolvedByEnv.get(env);
+    if (values) allValuesMerged = deepMerge(allValuesMerged, values);
   }
 
   const leafKeys = flattenLeafKeys(allValuesMerged);
@@ -581,6 +548,16 @@ export function registerOrphanDiagnostics(
 
   refreshAll();
 
+  let refreshTimeout: ReturnType<typeof setTimeout> | undefined;
+  const DEBOUNCE_MS = 400;
+  function debouncedRefresh(): void {
+    if (refreshTimeout) clearTimeout(refreshTimeout);
+    refreshTimeout = setTimeout(() => {
+      refreshTimeout = undefined;
+      refreshAll();
+    }, DEBOUNCE_MS);
+  }
+
   const isRelevantFile = (doc: vscode.TextDocument) =>
     doc.uri.fsPath.includes(path.sep + 'templates' + path.sep) ||
     doc.fileName.endsWith('values.yaml') ||
@@ -633,14 +610,11 @@ export function registerOrphanDiagnostics(
         },
       }
     ),
-    vscode.workspace.onDidOpenTextDocument((doc) => {
-      if (vscode.workspace.getWorkspaceFolder(doc.uri) && isRelevantFile(doc)) {
-        refreshAll();
-      }
-    }),
+    // Skip refresh on open - only on save. Reduces perceived lag when switching files.
+    // vscode.workspace.onDidOpenTextDocument((doc) => { ... }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
       if (vscode.workspace.getWorkspaceFolder(doc.uri) && isRelevantFile(doc)) {
-        refreshAll();
+        debouncedRefresh();
       }
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {

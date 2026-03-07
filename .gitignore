@@ -420,3 +420,4 @@ helm-values-navigator.code-workspace
 .vscodeignore
 package-lock.json
 scripts/test-nolo-helm.ps1
+build.ps1
