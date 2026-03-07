@@ -18,6 +18,9 @@ import {
 
 const VALUES_PATH_REGEX = /\.Values\.([a-zA-Z0-9_.-]+)/g;
 
+/** Diagnostic code for missing subchart dependencies - enables Quick Fix. */
+export const MISSING_SUBCHART_DEPS_CODE = 'helmValues.missingSubchartDeps';
+
 function offsetToPosition(text: string, offset: number): vscode.Position {
   const before = text.slice(0, offset);
   const line = (before.match(/\n/g) ?? []).length;
@@ -334,6 +337,7 @@ function runDiagnosticsForFolder(
       "Subchart dependencies not found in charts/. Run 'helm dependency update' in the chart directory so orphan diagnostics can check subchart template usage.",
       vscode.DiagnosticSeverity.Information
     );
+    diag.code = MISSING_SUBCHART_DEPS_CODE;
     const existing = diagnosticsByUri.get(chartYamlUri.toString()) ?? [];
     diagnosticsByUri.set(chartYamlUri.toString(), [...existing, diag]);
   }
@@ -580,10 +584,55 @@ export function registerOrphanDiagnostics(
   const isRelevantFile = (doc: vscode.TextDocument) =>
     doc.uri.fsPath.includes(path.sep + 'templates' + path.sep) ||
     doc.fileName.endsWith('values.yaml') ||
-    doc.fileName.endsWith('values.yml');
+    doc.fileName.endsWith('values.yml') ||
+    doc.fileName.endsWith('Chart.yaml');
 
   context.subscriptions.push(
     vscode.commands.registerCommand('helmValues.refreshDiagnostics', refreshAll),
+    vscode.commands.registerCommand(
+      'helmValues.updateDependencies',
+      (chartRoot?: string) => {
+        const dir = chartRoot ?? (() => {
+          const doc = vscode.window.activeTextEditor?.document;
+          if (doc?.uri.fsPath.endsWith('Chart.yaml') || doc?.uri.fsPath.endsWith(path.sep + 'Chart.yaml')) {
+            return path.dirname(doc.uri.fsPath);
+          }
+          return undefined;
+        })();
+        if (!dir) {
+          vscode.window.showErrorMessage('No chart directory found. Open Chart.yaml or run from a Helm chart.');
+          return;
+        }
+        const term = vscode.window.createTerminal({ cwd: dir, name: 'Helm' });
+        term.sendText('helm dependency update');
+        term.show();
+        vscode.window.showInformationMessage(
+          'Running helm dependency update. Run "Helm: Refresh Diagnostics" after it completes.'
+        );
+      }
+    ),
+    vscode.languages.registerCodeActionsProvider(
+      { pattern: '**/Chart.yaml' },
+      {
+        provideCodeActions(document, _range, context) {
+          const hasMissingDeps = context.diagnostics.some(
+            (d) => d.code === MISSING_SUBCHART_DEPS_CODE || (typeof d.code === 'object' && d.code?.value === MISSING_SUBCHART_DEPS_CODE)
+          );
+          if (!hasMissingDeps) return [];
+          const chartRoot = path.dirname(document.uri.fsPath);
+          const action = new vscode.CodeAction(
+            "Run 'helm dependency update'",
+            vscode.CodeActionKind.QuickFix
+          );
+          action.command = {
+            command: 'helmValues.updateDependencies',
+            title: "Run helm dependency update",
+            arguments: [chartRoot],
+          };
+          return [action];
+        },
+      }
+    ),
     vscode.workspace.onDidOpenTextDocument((doc) => {
       if (vscode.workspace.getWorkspaceFolder(doc.uri) && isRelevantFile(doc)) {
         refreshAll();

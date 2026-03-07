@@ -2,7 +2,7 @@
   "name": "helm-values-navigator",
   "displayName": "Helm Values Navigator",
   "description": "Hover over .Values in Helm templates to see resolved values across environments. Orphan detection for unused keys and unresolved refs.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "MichalHajny",
   "repository": {
     "type": "git",
@@ -25,6 +25,10 @@
       {
         "command": "helmValues.refreshDiagnostics",
         "title": "Helm: Refresh Diagnostics"
+      },
+      {
+        "command": "helmValues.updateDependencies",
+        "title": "Helm: Update Dependencies"
       }
     ],
     "configuration": {

@@ -8,7 +8,7 @@ VS Code extension for inspecting Helm values across environments. Hover over `.V
 
 - **Values hover**: Hover over `.Values.x.y.z` in `templates/**/*.{yaml,yml,tpl}` → inline table of resolved values across all environments. Works in `{{ .Values.x }}`, `{{- if .Values.x }}`, `{{- with .Values.x }}`, etc. Values that differ from the base are **bold**; missing keys show `⚠ not set`.
 - **Template definition hover**: Hover over `{{ include "template.name" . }}` → shows the `define` block source (file + full definition).
-- **Orphan diagnostics**: Squiggly lines for `.Values` paths not defined in any values file (Error); hint for value keys not referenced in templates (Hint). Values passed to dependency charts (e.g. `subchart1.replicaCount`) are considered used if the subchart's templates reference them. Use `helmValues.excludeOrphanPrefixes` to suppress noisy paths. Command palette: **Helm: Refresh Diagnostics** to refresh on demand.
+- **Orphan diagnostics**: Squiggly lines for `.Values` paths not defined in any values file (Error); hint for value keys not referenced in templates (Hint). Values passed to dependency charts (e.g. `subchart1.replicaCount`) are considered used if the subchart's templates reference them. When Chart.yaml lists dependencies not found in `charts/`, an informational diagnostic appears with a **Quick Fix** to run `helm dependency update`. Use `helmValues.excludeOrphanPrefixes` to suppress noisy paths. When subchart dependencies are missing, a Quick Fix (lightbulb) offers to run `helm dependency update`. Command palette: **Helm: Refresh Diagnostics**, **Helm: Update Dependencies**. When subchart dependencies are missing, a Quick Fix on Chart.yaml offers to run `helm dependency update`.
 
 ## Supported layouts
 
