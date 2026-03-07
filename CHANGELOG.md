@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Helm Values Explorer will be documented in this file.
+All notable changes to Helm Values Navigator will be documented in this file.
 
 ## [0.1.0] - 2025-03-07
 

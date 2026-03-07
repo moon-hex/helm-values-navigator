@@ -1,4 +1,4 @@
-# Helm Values Explorer
+# Helm Values Navigator
 
 VS Code extension for inspecting Helm values across environments. Hover over `.Values` references to see resolved values per environment; hover over `include` calls to see template definitions. Orphan diagnostics for unresolved refs and unused keys.
 
@@ -29,5 +29,4 @@ VS Code extension for inspecting Helm values across environments. Hover over `.V
 | `helmValues.valuesBasePath` | Base path for value files (default: `.`). Used with custom layout |
 | `helmValues.valuesFilePattern` | Pattern with `{env}` placeholder (e.g. `values/values-{env}.yml`) |
 | `helmValues.excludeOrphanPrefixes` | Path prefixes to exclude from orphan diagnostics (e.g. `["global.images"]`) |
-| `helmValues.orphanDiagnosticsEnabled` | Enable/disable orphan diagnostics (default: `true`) |
 | `helmValues.orphanDiagnosticsEnabled` | Enable/disable orphan diagnostics (default: `true`) |

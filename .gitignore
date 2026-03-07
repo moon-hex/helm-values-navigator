@@ -416,7 +416,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
-helm-values-explorer.code-workspace
+helm-values-navigator.code-workspace
 .vscodeignore
 package-lock.json
 scripts/test-nolo-helm.ps1

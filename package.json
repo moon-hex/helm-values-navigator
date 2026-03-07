@@ -1,12 +1,12 @@
 {
-  "name": "helm-values-explorer",
-  "displayName": "Helm Values Explorer",
+  "name": "helm-values-navigator",
+  "displayName": "Helm Values Navigator",
   "description": "Hover over .Values in Helm templates to see resolved values across environments. Orphan detection for unused keys and unresolved refs.",
   "version": "0.1.0",
   "publisher": "MichalHajny",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/helm-values-explorer"
+    "url": "https://github.com/your-org/helm-values-navigator"
   },
   "license": "Apache-2.0",
   "icon": "images/icon.png",
@@ -28,7 +28,7 @@
       }
     ],
     "configuration": {
-      "title": "Helm Values Explorer",
+      "title": "Helm Values Navigator",
       "properties": {
         "helmValues.helmfilePath": {
           "type": "string",
