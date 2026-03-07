@@ -4,7 +4,7 @@ VS Code extension for inspecting Helm values across environments. Hover over `.V
 
 ## Features
 
-- **Values hover**: Hover over `{{ .Values.x.y.z }}` in `templates/**/*.{yaml,yml,tpl}` → inline table of resolved values across all environments. Values that differ from the base are **bold**; missing keys show `⚠ not set`.
+- **Values hover**: Hover over `.Values.x.y.z` in `templates/**/*.{yaml,yml,tpl}` → inline table of resolved values across all environments. Works in `{{ .Values.x }}`, `{{- if .Values.x }}`, `{{- with .Values.x }}`, etc. Values that differ from the base are **bold**; missing keys show `⚠ not set`.
 - **Template definition hover**: Hover over `{{ include "template.name" . }}` → shows the `define` block source (file + full definition).
 
 ## Supported layouts

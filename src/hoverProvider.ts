@@ -3,14 +3,16 @@ import { detectLayout } from './layout';
 import { findTemplateDefinition, getTemplatesDir } from './templateFinder';
 import {
   getBaseValues,
+  getOverrideOnlyValues,
+  getOverrideOnlyValuesOverrideFolder,
   getResolvedValues,
   getResolvedValuesOverrideFolder,
   getValueAtPath,
   ValuesResolverContext,
 } from './valuesResolver';
 
-// Supports: {{ .Values.x }}, {{.Values.x}}, {{- .Values.x -}}, {{  .Values.x  }}
-const VALUES_PATH_REGEX = /\{\{-?\s*\.Values\.([a-zA-Z0-9_.-]+)\s*-?\}\}/g;
+// Supports: {{ .Values.x }}, {{- if .Values.x }}, {{- with .Values.x }}, etc.
+const VALUES_PATH_REGEX = /\.Values\.([a-zA-Z0-9_.-]+)/g;
 
 // Supports: {{ include "name" . }}, {{- include "name" . -}}, (include "name" .)
 const INCLUDE_REGEX = /\{\{-?\s*include\s+"([a-zA-Z0-9_.-]+)"\s+[.\$][^}]*-?\}\}|\(\s*include\s+"([a-zA-Z0-9_.-]+)"\s+[.\$][^)]*\)/g;
@@ -58,6 +60,10 @@ function formatValue(val: unknown): string {
   }
   const str = String(val);
   return str.length > 60 ? str.slice(0, 57) + '...' : str;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 export function registerHoverProvider(context: vscode.ExtensionContext): void {
@@ -110,6 +116,7 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
       const rows: string[] = [];
       for (const env of envs) {
         let resolved;
+        let overrideOnly: Record<string, unknown> = {};
         if (layout.layout === 'helmfile') {
           const ctx: ValuesResolverContext = {
             workspaceRoot: layout.rootPath,
@@ -119,11 +126,18 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
             secretsFilePath: config.get<string>('secretsFilePath'),
           };
           resolved = getResolvedValues(ctx, env);
+          overrideOnly = getOverrideOnlyValues(ctx, env);
         } else if (layout.layout === 'override-folder') {
           resolved = getResolvedValuesOverrideFolder(
             layout.rootPath,
             layout.chartPath,
             config.get<string>('baseValuesFile') ?? 'values.yaml',
+            config.get<string>('overridesDir') ?? 'overrides',
+            env
+          );
+          overrideOnly = getOverrideOnlyValuesOverrideFolder(
+            layout.rootPath,
+            layout.chartPath,
             config.get<string>('overridesDir') ?? 'overrides',
             env
           );
@@ -143,7 +157,16 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
           val !== undefined &&
           val !== null &&
           JSON.stringify(val) !== JSON.stringify(baseVal);
-        const cell = differs ? `**${formatted}**` : formatted;
+        const isInOverride = getValueAtPath(overrideOnly, path) !== undefined;
+
+        let cell: string;
+        if (isInOverride && differs) {
+          cell = `<span style="color:var(--vscode-editorWarning-foreground)">**${escapeHtml(formatted)}**</span>`;
+        } else if (isInOverride && !differs) {
+          cell = `<span style="color:var(--vscode-descriptionForeground)">${escapeHtml(formatted)} <em>(= default)</em></span>`;
+        } else {
+          cell = `<span style="color:var(--vscode-descriptionForeground)">${escapeHtml(formatted)} <em>(default)</em></span>`;
+        }
         rows.push(`| ${env} | ${cell} |`);
       }
 
@@ -154,9 +177,9 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
       ].join('\n');
 
       const md = new vscode.MarkdownString();
+      md.supportHtml = true;
       md.appendMarkdown(`### \`.Values.${path}\`\n\n`);
       md.appendMarkdown(table);
-      md.isTrusted = true;
 
       return new vscode.Hover(md);
     },

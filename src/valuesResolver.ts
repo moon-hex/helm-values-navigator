@@ -145,6 +145,39 @@ export function getResolvedValues(
   };
 }
 
+/** Merge override layers only (no base). Used to detect if a path is explicitly overridden. */
+export function getOverrideOnlyValues(
+  ctx: ValuesResolverContext,
+  envName: string
+): Record<string, unknown> {
+  let merged: Record<string, unknown> = {};
+  for (const template of ctx.valueFileTemplates) {
+    let filePath = path.join(ctx.workspaceRoot, resolveValueFileTemplate(template, envName));
+    if (ctx.secretsFilePath && isSecretsFile(template)) {
+      filePath = path.isAbsolute(ctx.secretsFilePath)
+        ? ctx.secretsFilePath
+        : path.join(ctx.workspaceRoot, ctx.secretsFilePath);
+    }
+    const content = loadYamlFile(filePath);
+    if (content) {
+      merged = deepMerge(merged, content) as Record<string, unknown>;
+    }
+  }
+  return merged;
+}
+
+/** Override-only for override-folder layout. */
+export function getOverrideOnlyValuesOverrideFolder(
+  workspaceRoot: string,
+  chartPath: string,
+  overridesDir: string,
+  envName: string
+): Record<string, unknown> {
+  const overridePathYaml = path.join(workspaceRoot, chartPath, overridesDir, `${envName}.yaml`);
+  const overridePathYml = path.join(workspaceRoot, chartPath, overridesDir, `${envName}.yml`);
+  return loadYamlFile(overridePathYaml) ?? loadYamlFile(overridePathYml) ?? {};
+}
+
 /** Get value at dotted path (e.g. "global.nolo.cache.endpoint.ip"). Returns undefined if not found. */
 export function getValueAtPath(
   obj: Record<string, unknown>,
