@@ -49,6 +49,20 @@
           },
           "default": [],
           "description": "Value path prefixes to exclude from orphan diagnostics (e.g. global.images)"
+        },
+        "helmValues.environments": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Explicit environment list. When set, overrides helmfile/override-folder auto-detect. Use with valuesFilePattern."
+        },
+        "helmValues.valuesBasePath": {
+          "type": "string",
+          "default": ".",
+          "description": "Base path for value files (relative to workspace root). Used when environments is set."
+        },
+        "helmValues.valuesFilePattern": {
+          "type": "string",
+          "description": "Pattern for env value files. Use {env} as placeholder. E.g. 'values/values-{env}.yml' or 'overrides/{env}.yaml'"
         }
       }
     }

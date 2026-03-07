@@ -3,6 +3,7 @@ import { detectLayout } from './layout';
 import { registerHoverProvider } from './hoverProvider';
 import {
   getResolvedValues,
+  getResolvedValuesCustom,
   getResolvedValuesOverrideFolder,
   ResolvedValues,
   ValuesResolverContext,
@@ -23,6 +24,9 @@ export function activate(context: vscode.ExtensionContext): void {
       baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
       overridesDir: config.get<string>('overridesDir') ?? 'overrides',
       secretsFilePath: config.get<string>('secretsFilePath'),
+      environments: config.get<string[]>('environments'),
+      valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
+      valuesFilePattern: config.get<string>('valuesFilePattern'),
     };
   }
 
@@ -42,9 +46,12 @@ export function activate(context: vscode.ExtensionContext): void {
         chartPath: config.chartPath,
         baseValuesFile: config.baseValuesFile,
         overridesDir: config.overridesDir,
+        environments: config.environments,
+        valuesBasePath: config.valuesBasePath,
+        valuesFilePattern: config.valuesFilePattern,
       });
       if (layout) {
-        if (layout.layout === 'helmfile' || layout.layout === 'override-folder') {
+        if (layout.layout === 'helmfile' || layout.layout === 'override-folder' || layout.layout === 'custom') {
           envCount += layout.environments.length;
         } else {
           envCount += 1; // standalone = 1 env
@@ -86,9 +93,23 @@ export function resolveValuesForEnv(
     chartPath: config.get<string>('chartPath'),
     baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
     overridesDir: config.get<string>('overridesDir') ?? 'overrides',
+    environments: config.get<string[]>('environments'),
+    valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
+    valuesFilePattern: config.get<string>('valuesFilePattern'),
   });
 
   if (!layout) return null;
+
+  if (layout.layout === 'custom') {
+    return getResolvedValuesCustom(
+      layout.rootPath,
+      layout.chartPath,
+      config.get<string>('baseValuesFile') ?? 'values.yaml',
+      layout.valuesBasePath,
+      layout.valuesFilePattern,
+      envName
+    );
+  }
 
   if (layout.layout === 'helmfile') {
     const ctx: ValuesResolverContext = {
@@ -135,10 +156,13 @@ export function getEnvNames(docUri: vscode.Uri): string[] {
     chartPath: config.get<string>('chartPath'),
     baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
     overridesDir: config.get<string>('overridesDir') ?? 'overrides',
+    environments: config.get<string[]>('environments'),
+    valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
+    valuesFilePattern: config.get<string>('valuesFilePattern'),
   });
 
   if (!layout) return [];
-  if (layout.layout === 'helmfile' || layout.layout === 'override-folder') {
+  if (layout.layout === 'helmfile' || layout.layout === 'override-folder' || layout.layout === 'custom') {
     return layout.environments;
   }
   return ['default'];

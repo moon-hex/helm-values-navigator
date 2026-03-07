@@ -178,6 +178,66 @@ export function getOverrideOnlyValuesOverrideFolder(
   return loadYamlFile(overridePathYaml) ?? loadYamlFile(overridePathYml) ?? {};
 }
 
+/** Resolve values for custom layout (explicit environments + valuesFilePattern). */
+export function getResolvedValuesCustom(
+  workspaceRoot: string,
+  chartPath: string,
+  baseValuesFile: string,
+  valuesBasePath: string,
+  valuesFilePattern: string,
+  envName: string
+): ResolvedValues {
+  const layersLoaded: string[] = [];
+  const missingLayers: string[] = [];
+  const chartRoot = path.join(workspaceRoot, chartPath);
+  const basePath = path.join(chartRoot, baseValuesFile);
+  const valuesFilePath = path.join(
+    workspaceRoot,
+    valuesBasePath,
+    valuesFilePattern.replace(/{env}/g, envName)
+  );
+
+  let merged: Record<string, unknown> = {};
+  const baseContent = loadYamlFile(basePath);
+  if (baseContent) {
+    merged = { ...baseContent };
+    layersLoaded.push(baseValuesFile);
+  } else {
+    missingLayers.push(baseValuesFile);
+  }
+
+  const envContent = loadYamlFile(valuesFilePath);
+  const envRel = path.relative(workspaceRoot, valuesFilePath);
+  if (envContent) {
+    merged = deepMerge(merged, envContent) as Record<string, unknown>;
+    layersLoaded.push(envRel);
+  } else {
+    missingLayers.push(envRel);
+  }
+
+  return {
+    env: envName,
+    values: merged,
+    layersLoaded,
+    missingLayers,
+  };
+}
+
+/** Override-only for custom layout. */
+export function getOverrideOnlyValuesCustom(
+  workspaceRoot: string,
+  valuesBasePath: string,
+  valuesFilePattern: string,
+  envName: string
+): Record<string, unknown> {
+  const valuesFilePath = path.join(
+    workspaceRoot,
+    valuesBasePath,
+    valuesFilePattern.replace(/{env}/g, envName)
+  );
+  return loadYamlFile(valuesFilePath) ?? {};
+}
+
 /** Get value at dotted path (e.g. "global.nolo.cache.endpoint.ip"). Returns undefined if not found. */
 export function getValueAtPath(
   obj: Record<string, unknown>,

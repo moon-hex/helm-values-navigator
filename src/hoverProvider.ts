@@ -4,8 +4,10 @@ import { findTemplateDefinition, getTemplatesDir } from './templateFinder';
 import {
   getBaseValues,
   getOverrideOnlyValues,
+  getOverrideOnlyValuesCustom,
   getOverrideOnlyValuesOverrideFolder,
   getResolvedValues,
+  getResolvedValuesCustom,
   getResolvedValuesOverrideFolder,
   getValueAtPath,
   ValuesResolverContext,
@@ -97,12 +99,15 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
         chartPath: config.get<string>('chartPath'),
         baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
         overridesDir: config.get<string>('overridesDir') ?? 'overrides',
+        environments: config.get<string[]>('environments'),
+        valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
+        valuesFilePattern: config.get<string>('valuesFilePattern'),
       });
 
       if (!layout) return null;
 
       const envs =
-        layout.layout === 'helmfile' || layout.layout === 'override-folder'
+        layout.layout === 'helmfile' || layout.layout === 'override-folder' || layout.layout === 'custom'
           ? layout.environments
           : ['default'];
 
@@ -139,6 +144,21 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
             layout.rootPath,
             layout.chartPath,
             config.get<string>('overridesDir') ?? 'overrides',
+            env
+          );
+        } else if (layout.layout === 'custom') {
+          resolved = getResolvedValuesCustom(
+            layout.rootPath,
+            layout.chartPath,
+            config.get<string>('baseValuesFile') ?? 'values.yaml',
+            layout.valuesBasePath,
+            layout.valuesFilePattern,
+            env
+          );
+          overrideOnly = getOverrideOnlyValuesCustom(
+            layout.rootPath,
+            layout.valuesBasePath,
+            layout.valuesFilePattern,
             env
           );
         } else {

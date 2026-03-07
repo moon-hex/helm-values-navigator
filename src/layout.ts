@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseHelmfile } from './valuesResolver';
 
-export type LayoutType = 'helmfile' | 'override-folder' | 'standalone';
+export type LayoutType = 'helmfile' | 'override-folder' | 'standalone' | 'custom';
 
 export interface ChartInfo {
   rootPath: string;
@@ -31,7 +31,15 @@ export interface StandaloneInfo extends ChartInfo {
   chartPath: string;
 }
 
-export type ResolvedLayout = HelmfileInfo | OverrideFolderInfo | StandaloneInfo;
+export interface CustomInfo extends ChartInfo {
+  layout: 'custom';
+  chartPath: string;
+  environments: string[];
+  valuesBasePath: string;
+  valuesFilePattern: string;
+}
+
+export type ResolvedLayout = HelmfileInfo | OverrideFolderInfo | StandaloneInfo | CustomInfo;
 
 function findChartYamlPaths(folder: vscode.WorkspaceFolder): string[] {
   const results: string[] = [];
@@ -67,13 +75,13 @@ export function detectLayout(
     chartPath?: string;
     baseValuesFile: string;
     overridesDir: string;
+    environments?: string[];
+    valuesBasePath?: string;
+    valuesFilePattern?: string;
   }
 ): ResolvedLayout | null {
   const rootPath = folder.uri.fsPath;
   const rootUri = folder.uri;
-
-  const helmfileFullPath = path.join(rootPath, config.helmfilePath);
-  const hasHelmfile = fs.existsSync(helmfileFullPath);
 
   const chartDirs = findChartYamlPaths(folder);
   if (chartDirs.length === 0) {
@@ -90,6 +98,25 @@ export function detectLayout(
     chartPath = chartDirs[0];
   }
 
+  const chartPathRel = path.relative(rootPath, chartPath).replace(/\\/g, '/');
+
+  // Custom: explicit environments + valuesFilePattern
+  if (config.environments?.length && config.valuesFilePattern) {
+    return {
+      layout: 'custom',
+      rootPath,
+      rootUri,
+      workspaceFolder: folder,
+      chartPath: chartPathRel,
+      environments: config.environments,
+      valuesBasePath: config.valuesBasePath ?? '.',
+      valuesFilePattern: config.valuesFilePattern,
+    };
+  }
+
+  const helmfileFullPath = path.join(rootPath, config.helmfilePath);
+  const hasHelmfile = fs.existsSync(helmfileFullPath);
+
   if (hasHelmfile) {
     const helmfile = parseHelmfile(helmfileFullPath);
     if (helmfile) {
@@ -100,14 +127,14 @@ export function detectLayout(
       const chartPathResolved = fs.existsSync(path.join(helmfileChartPath, 'Chart.yaml'))
         ? helmfileChartPath
         : chartPath;
-      const chartPathRel = path.relative(rootPath, chartPathResolved).replace(/\\/g, '/');
+      const helmfileChartPathRel = path.relative(rootPath, chartPathResolved).replace(/\\/g, '/');
       return {
         layout: 'helmfile',
         rootPath,
         rootUri,
         workspaceFolder: folder,
         helmfilePath: helmfileFullPath,
-        chartPath: chartPathRel,
+        chartPath: helmfileChartPathRel,
         environments: helmfile.environments,
         valueFileTemplates: helmfile.valueFileTemplates,
       };
@@ -123,7 +150,6 @@ export function detectLayout(
       .map((f) => f.replace(/\.(yaml|yml)$/, ''));
 
     if (envs.length > 0) {
-      const chartPathRel = path.relative(rootPath, chartPath).replace(/\\/g, '/');
       return {
         layout: 'override-folder',
         rootPath,
@@ -135,7 +161,6 @@ export function detectLayout(
     }
   }
 
-  const chartPathRel = path.relative(rootPath, chartPath).replace(/\\/g, '/');
   return {
     layout: 'standalone',
     rootPath,
