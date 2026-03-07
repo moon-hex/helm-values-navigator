@@ -11,8 +11,7 @@
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:**/helmfile.yaml",
-    "workspaceContains:**/values*.yaml"
+    "workspaceContains:**/Chart.yaml"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -25,13 +24,29 @@
           "default": "helmfile.yaml",
           "description": "Path to helmfile.yaml relative to workspace root"
         },
+        "helmValues.chartPath": {
+          "type": "string",
+          "description": "Override chart path when multiple charts exist (e.g. nolo or helm/sample-gitops-2)"
+        },
+        "helmValues.baseValuesFile": {
+          "type": "string",
+          "default": "values.yaml",
+          "description": "Base values filename relative to chart root"
+        },
+        "helmValues.overridesDir": {
+          "type": "string",
+          "default": "overrides",
+          "description": "Overrides directory relative to chart root (override-folder layout)"
+        },
         "helmValues.secretsFilePath": {
           "type": "string",
           "description": "Override path to secrets file (e.g. when git-ignored)"
         },
         "helmValues.excludeOrphanPrefixes": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "Value path prefixes to exclude from orphan diagnostics (e.g. global.images)"
         }
@@ -45,9 +60,12 @@
     "package": "vsce package"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
     "typescript": "^5.3.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
 }

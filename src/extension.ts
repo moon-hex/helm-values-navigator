@@ -1,9 +1,30 @@
-import * as fs from 'fs';
 import * as vscode from 'vscode';
+import { detectLayout } from './layout';
+import { registerHoverProvider } from './hoverProvider';
+import {
+  getResolvedValues,
+  getResolvedValuesOverrideFolder,
+  ResolvedValues,
+  ValuesResolverContext,
+} from './valuesResolver';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  const statusBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    100
+  );
   context.subscriptions.push(statusBar);
+
+  function getConfig(folder: vscode.WorkspaceFolder) {
+    const config = vscode.workspace.getConfiguration('helmValues', folder.uri);
+    return {
+      helmfilePath: config.get<string>('helmfilePath') ?? 'helmfile.yaml',
+      chartPath: config.get<string>('chartPath'),
+      baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
+      overridesDir: config.get<string>('overridesDir') ?? 'overrides',
+      secretsFilePath: config.get<string>('secretsFilePath'),
+    };
+  }
 
   function updateStatus(): void {
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -13,26 +34,114 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    const hasHelmfile = workspaceFolders.some((folder) => {
-      const helmfilePath = vscode.Uri.joinPath(folder.uri, 'helmfile.yaml').fsPath;
-      return fs.existsSync(helmfilePath);
-    });
+    let envCount = 0;
+    for (const folder of workspaceFolders) {
+      const config = getConfig(folder);
+      const layout = detectLayout(folder, {
+        helmfilePath: config.helmfilePath,
+        chartPath: config.chartPath,
+        baseValuesFile: config.baseValuesFile,
+        overridesDir: config.overridesDir,
+      });
+      if (layout) {
+        if (layout.layout === 'helmfile' || layout.layout === 'override-folder') {
+          envCount += layout.environments.length;
+        } else {
+          envCount += 1; // standalone = 1 env
+        }
+      }
+    }
 
-    if (hasHelmfile) {
-      statusBar.text = 'Helm: active';
+    if (envCount > 0) {
+      statusBar.text = `Helm: ${envCount} env${envCount === 1 ? '' : 's'}`;
     } else {
-      statusBar.text = 'Helm: no helmfile';
+      statusBar.text = 'Helm: no chart';
     }
     statusBar.show();
   }
 
-  // Initial update
   updateStatus();
 
-  // Update when workspace changes
+  registerHoverProvider(context);
+
   context.subscriptions.push(
-    vscode.workspace.onDidChangeWorkspaceFolders(updateStatus)
+    vscode.workspace.onDidChangeWorkspaceFolders(updateStatus),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('helmValues')) updateStatus();
+    })
   );
+}
+
+/** Resolve values for a given env. Returns null if layout not detected. */
+export function resolveValuesForEnv(
+  docUri: vscode.Uri,
+  envName: string
+): ResolvedValues | null {
+  const folder = vscode.workspace.getWorkspaceFolder(docUri);
+  if (!folder) return null;
+
+  const config = vscode.workspace.getConfiguration('helmValues', folder.uri);
+  const layout = detectLayout(folder, {
+    helmfilePath: config.get<string>('helmfilePath') ?? 'helmfile.yaml',
+    chartPath: config.get<string>('chartPath'),
+    baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
+    overridesDir: config.get<string>('overridesDir') ?? 'overrides',
+  });
+
+  if (!layout) return null;
+
+  if (layout.layout === 'helmfile') {
+    const ctx: ValuesResolverContext = {
+      workspaceRoot: layout.rootPath,
+      chartPath: layout.chartPath,
+      baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
+      valueFileTemplates: layout.valueFileTemplates,
+      secretsFilePath: config.get<string>('secretsFilePath'),
+    };
+    return getResolvedValues(ctx, envName);
+  }
+
+  if (layout.layout === 'override-folder') {
+    return getResolvedValuesOverrideFolder(
+      layout.rootPath,
+      layout.chartPath,
+      config.get<string>('baseValuesFile') ?? 'values.yaml',
+      config.get<string>('overridesDir') ?? 'overrides',
+      envName
+    );
+  }
+
+  // standalone: single "default" env
+  if (envName === 'default') {
+    const ctx: ValuesResolverContext = {
+      workspaceRoot: layout.rootPath,
+      chartPath: layout.chartPath,
+      baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
+      valueFileTemplates: [],
+    };
+    return getResolvedValues(ctx, envName);
+  }
+  return null;
+}
+
+/** Get all env names for the workspace containing docUri. */
+export function getEnvNames(docUri: vscode.Uri): string[] {
+  const folder = vscode.workspace.getWorkspaceFolder(docUri);
+  if (!folder) return [];
+
+  const config = vscode.workspace.getConfiguration('helmValues', folder.uri);
+  const layout = detectLayout(folder, {
+    helmfilePath: config.get<string>('helmfilePath') ?? 'helmfile.yaml',
+    chartPath: config.get<string>('chartPath'),
+    baseValuesFile: config.get<string>('baseValuesFile') ?? 'values.yaml',
+    overridesDir: config.get<string>('overridesDir') ?? 'overrides',
+  });
+
+  if (!layout) return [];
+  if (layout.layout === 'helmfile' || layout.layout === 'override-folder') {
+    return layout.environments;
+  }
+  return ['default'];
 }
 
 export function deactivate(): void {}
