@@ -119,6 +119,68 @@ function deepMerge(
   return result;
 }
 
+/** Parse Chart.yaml and return dependency names with their chart directories. */
+function getChartDependencies(
+  chartRoot: string
+): { found: { name: string; chartDir: string }[]; expectedNames: string[] } {
+  const chartYamlPath = path.join(chartRoot, 'Chart.yaml');
+  if (!fs.existsSync(chartYamlPath)) return { found: [], expectedNames: [] };
+
+  let doc: Record<string, unknown> | null;
+  try {
+    const content = fs.readFileSync(chartYamlPath, 'utf8');
+    doc = yaml.load(content) as Record<string, unknown> | null;
+  } catch {
+    return { found: [], expectedNames: [] };
+  }
+  if (!doc || typeof doc !== 'object') return { found: [], expectedNames: [] };
+
+  const deps = doc.dependencies as Array<{ name?: string }> | undefined;
+  if (!Array.isArray(deps)) return { found: [], expectedNames: [] };
+
+  const expectedNames = deps
+    .map((d) => d?.name)
+    .filter((n): n is string => typeof n === 'string' && n.length > 0);
+
+  const chartsDir = path.join(chartRoot, 'charts');
+  if (!fs.existsSync(chartsDir) || !fs.statSync(chartsDir).isDirectory()) {
+    return { found: [], expectedNames };
+  }
+
+  const found: { name: string; chartDir: string }[] = [];
+  for (const dep of deps) {
+    const name = dep?.name;
+    if (typeof name !== 'string' || !name) continue;
+
+    const exactPath = path.join(chartsDir, name);
+    if (fs.existsSync(exactPath) && fs.statSync(exactPath).isDirectory()) {
+      if (fs.existsSync(path.join(exactPath, 'Chart.yaml'))) {
+        found.push({ name, chartDir: exactPath });
+      }
+      continue;
+    }
+
+    try {
+      const entries = fs.readdirSync(chartsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (
+          entry.isDirectory() &&
+          (entry.name === name || entry.name.startsWith(name + '-'))
+        ) {
+          const chartDir = path.join(chartsDir, entry.name);
+          if (fs.existsSync(path.join(chartDir, 'Chart.yaml'))) {
+            found.push({ name, chartDir });
+            break;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return { found, expectedNames };
+}
+
 function runDiagnosticsForFolder(
   folder: vscode.WorkspaceFolder,
   collection: vscode.DiagnosticCollection,
@@ -184,6 +246,8 @@ function runDiagnosticsForFolder(
     }
   }
   walkTemplates(templatesDir);
+
+  const { found: dependencies, expectedNames } = getChartDependencies(chartRoot);
 
   // Direction 1: Unresolved refs - paths in templates that exist in no values
   const allReferencedPaths = new Set<string>();
@@ -259,6 +323,47 @@ function runDiagnosticsForFolder(
     }
     if (diags.length > 0) {
       diagnosticsByUri.set(uri.toString(), diags);
+    }
+  }
+
+  // Warn when Chart.yaml lists dependencies but they're not in charts/
+  if (expectedNames.length > 0 && dependencies.length < expectedNames.length) {
+    const chartYamlUri = vscode.Uri.file(path.join(chartRoot, 'Chart.yaml'));
+    const diag = new vscode.Diagnostic(
+      new vscode.Range(0, 0, 0, 80),
+      "Subchart dependencies not found in charts/. Run 'helm dependency update' in the chart directory so orphan diagnostics can check subchart template usage.",
+      vscode.DiagnosticSeverity.Information
+    );
+    const existing = diagnosticsByUri.get(chartYamlUri.toString()) ?? [];
+    diagnosticsByUri.set(chartYamlUri.toString(), [...existing, diag]);
+  }
+
+  // Add paths from dependency (subchart) templates - parent values under dep name are used there
+  for (const { name, chartDir } of dependencies) {
+    const depTemplatesDir = path.join(chartDir, 'templates');
+    if (!fs.existsSync(depTemplatesDir) || !fs.statSync(depTemplatesDir).isDirectory()) continue;
+    const depFiles: string[] = [];
+    function walkDep(dir: string): void {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory() && entry.name !== 'charts') walkDep(fullPath);
+          else if (/\.(yaml|yml|tpl)$/.test(entry.name)) depFiles.push(fullPath);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    walkDep(depTemplatesDir);
+    for (const fp of depFiles) {
+      try {
+        const c = fs.readFileSync(fp, 'utf8');
+        const paths = extractValuesPathsFromText(c);
+        for (const { path: pathStr } of paths) allReferencedPaths.add(`${name}.${pathStr}`);
+      } catch {
+        // ignore
+      }
     }
   }
 
