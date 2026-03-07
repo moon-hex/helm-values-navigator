@@ -2,6 +2,12 @@
 
 All notable changes to Helm Values Navigator will be documented in this file.
 
+## [0.1.4] - 2025-03-07
+
+### Added
+
+- **Subchart .tgz support**: Orphan diagnostics now detect subchart dependencies stored as `.tgz` archives (from `helm dependency update`). Extracts to temp, scans templates for `.Values` paths, caches by tgz mtime to avoid re-extraction.
+
 ## [0.1.3] - 2025-03-07
 
 ### Performance

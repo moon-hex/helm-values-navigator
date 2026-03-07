@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as yaml from 'js-yaml';
 import { detectLayout } from './layout';
+import { getValuesPathsFromTgz } from './subchartTgz';
 import { getCachedDiagnostics, setCachedDiagnostics } from './valuesCache';
 import {
   flattenLeafKeys,
@@ -123,10 +124,12 @@ function deepMerge(
   return result;
 }
 
-/** Parse Chart.yaml and return dependency names with their chart directories. */
+type ChartDep = { name: string; chartDir?: string; tgzPath?: string };
+
+/** Parse Chart.yaml and return dependency names with their chart dirs or tgz paths. */
 function getChartDependencies(
   chartRoot: string
-): { found: { name: string; chartDir: string }[]; expectedNames: string[] } {
+): { found: ChartDep[]; expectedNames: string[] } {
   const chartYamlPath = path.join(chartRoot, 'Chart.yaml');
   if (!fs.existsSync(chartYamlPath)) return { found: [], expectedNames: [] };
 
@@ -151,7 +154,7 @@ function getChartDependencies(
     return { found: [], expectedNames };
   }
 
-  const found: { name: string; chartDir: string }[] = [];
+  const found: ChartDep[] = [];
   for (const dep of deps) {
     const name = dep?.name;
     if (typeof name !== 'string' || !name) continue;
@@ -167,15 +170,16 @@ function getChartDependencies(
     try {
       const entries = fs.readdirSync(chartsDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (
-          entry.isDirectory() &&
-          (entry.name === name || entry.name.startsWith(name + '-'))
-        ) {
+        if (entry.isDirectory() && (entry.name === name || entry.name.startsWith(name + '-'))) {
           const chartDir = path.join(chartsDir, entry.name);
           if (fs.existsSync(path.join(chartDir, 'Chart.yaml'))) {
             found.push({ name, chartDir });
             break;
           }
+        }
+        if (entry.isFile() && entry.name.endsWith('.tgz') && (entry.name === `${name}.tgz` || entry.name.startsWith(name + '-'))) {
+          found.push({ name, tgzPath: path.join(chartsDir, entry.name) });
+          break;
         }
       }
     } catch {
@@ -346,7 +350,15 @@ function runDiagnosticsForFolder(
   }
 
   // Add paths from dependency (subchart) templates - parent values under dep name are used there
-  for (const { name, chartDir } of dependencies) {
+  for (const dep of dependencies) {
+    const { name } = dep;
+    if (dep.tgzPath) {
+      const paths = getValuesPathsFromTgz(dep.tgzPath, name);
+      for (const p of paths) allReferencedPaths.add(p);
+      continue;
+    }
+    const chartDir = dep.chartDir;
+    if (!chartDir) continue;
     const depTemplatesDir = path.join(chartDir, 'templates');
     if (!fs.existsSync(depTemplatesDir) || !fs.statSync(depTemplatesDir).isDirectory()) continue;
     const depFiles: string[] = [];
