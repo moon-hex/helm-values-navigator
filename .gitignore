@@ -416,3 +416,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+helm-values-explorer.code-workspace
+.vscodeignore
+package-lock.json
+scripts/test-nolo-helm.ps1

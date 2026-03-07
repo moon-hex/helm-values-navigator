@@ -1,0 +1,53 @@
+{
+  "name": "helm-values-explorer",
+  "displayName": "Helm Values Explorer",
+  "description": "Hover over .Values in Helm templates to see resolved values across environments. Orphan detection for unused keys and unresolved refs.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/helmfile.yaml",
+    "workspaceContains:**/values*.yaml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [],
+    "configuration": {
+      "title": "Helm Values Explorer",
+      "properties": {
+        "helmValues.helmfilePath": {
+          "type": "string",
+          "default": "helmfile.yaml",
+          "description": "Path to helmfile.yaml relative to workspace root"
+        },
+        "helmValues.secretsFilePath": {
+          "type": "string",
+          "description": "Override path to secrets file (e.g. when git-ignored)"
+        },
+        "helmValues.excludeOrphanPrefixes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Value path prefixes to exclude from orphan diagnostics (e.g. global.images)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {}
+}
