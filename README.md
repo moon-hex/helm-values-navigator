@@ -17,6 +17,10 @@ VS Code extension for inspecting Helm values across environments. Hover over `.V
 - **Standalone**: Plain chart with `values.yaml` only. Single "default" environment.
 - **Custom**: Set `helmValues.environments` and `helmValues.valuesFilePattern` to use explicit env list and a pattern like `values/values-{env}.yml`. Base path via `helmValues.valuesBasePath`. Takes precedence over helmfile/override-folder when both are set.
 
+## See also my other work!
+
+- [Kustomize Navigator](https://marketplace.visualstudio.com/items?itemName=MichalHajny.kustomize-navigator) — Navigate and manage Kustomize references in Kubernetes manifests
+
 ## Settings
 
 | Setting | Description |
