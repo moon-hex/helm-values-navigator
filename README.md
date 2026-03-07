@@ -8,12 +8,13 @@ VS Code extension for inspecting Helm values across environments. Hover over `.V
 
 - **Values hover**: Hover over `.Values.x.y.z` in `templates/**/*.{yaml,yml,tpl}` → inline table of resolved values across all environments. Works in `{{ .Values.x }}`, `{{- if .Values.x }}`, `{{- with .Values.x }}`, etc. Values that differ from the base are **bold**; missing keys show `⚠ not set`.
 - **Template definition hover**: Hover over `{{ include "template.name" . }}` → shows the `define` block source (file + full definition).
-- **Orphan diagnostics**: Squiggly lines for `.Values` paths not defined in any values file (Error); hint for value keys not referenced in templates (Hint). Use `helmValues.excludeOrphanPrefixes` to suppress noisy paths.
+- **Orphan diagnostics**: Squiggly lines for `.Values` paths not defined in any values file (Error); hint for value keys not referenced in templates (Hint). Use `helmValues.excludeOrphanPrefixes` to suppress noisy paths. Command palette: **Helm: Refresh Diagnostics** to refresh on demand.
 
 ## Supported layouts
 
 - **Helmfile**: `helmfile.yaml` at workspace root with explicit `environments`. Value layers: chart base → env values → secrets → system.
 - **Override-folder**: `helm/*/values.yaml` + `helm/*/overrides/*.yaml`. Environments inferred from override filenames.
+- **Standalone**: Plain chart with `values.yaml` only. Single "default" environment.
 - **Custom**: Set `helmValues.environments` and `helmValues.valuesFilePattern` to use explicit env list and a pattern like `values/values-{env}.yml`. Base path via `helmValues.valuesBasePath`. Takes precedence over helmfile/override-folder when both are set.
 
 ## Settings

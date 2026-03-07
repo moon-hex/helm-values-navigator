@@ -14,4 +14,3 @@ All notable changes to Helm Values Navigator will be documented in this file.
 - **Sample chart**: Minimal helmfile layout (dev/staging) for quick testing
 - **Extension icon** and **screenshot** in README
 - **Orphan diagnostics**: Unresolved `.Values` refs → Error; unused value keys → Hint. Config: `excludeOrphanPrefixes`, `orphanDiagnosticsEnabled`
-- **Orphan diagnostics**: Unresolved `.Values` refs (Error), unused value keys (Hint). Config: `excludeOrphanPrefixes`, `orphanDiagnosticsEnabled`
