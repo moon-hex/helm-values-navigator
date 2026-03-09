@@ -2,6 +2,17 @@
 
 All notable changes to Helm Values Navigator will be documented in this file.
 
+## [0.1.8] - 2025-03-09
+
+### Fixed
+
+- **Add to exclude list (folder scope)**: `excludeOrphanPrefixes` now has `scope: resource` so Quick Fix can write to folder settings in multi-root workspaces (fixes "does not support folder resource scope" error).
+
+### Changed
+
+- Dependencies: esbuild ^0.27, tar ^7.5.11, glob override for security.
+- Build: `@vscode/vsce` devDep, GHA workflow (build on push/PR/tag v*), `.vscodeignore` tracked in repo.
+
 ## [0.1.7] - 2025-03-07
 
 ### Changed
