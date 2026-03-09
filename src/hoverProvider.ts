@@ -13,7 +13,12 @@ import {
   ValuesResolverContext,
 } from './valuesResolver';
 import { getCached, setCached, type CachedHoverData } from './valuesCache';
-import { evaluateCoalesce, parseCoalesceArgs } from './coalesce';
+import {
+  evaluateCoalesce,
+  evaluateDefault,
+  evaluateTernary,
+  getFallbackContext,
+} from './valuesFallback';
 
 // Supports: {{ .Values.x }}, {{- if .Values.x }}, {{- with .Values.x }}, etc.
 const VALUES_PATH_REGEX = /\.Values\.([a-zA-Z0-9_.-]+)/g;
@@ -187,8 +192,7 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
 
       const line = document.lineAt(position.line).text;
       const charOffset = line.slice(0, position.character).length;
-      const coalesceArgs = parseCoalesceArgs(line, charOffset);
-      const inCoalesce = coalesceArgs && coalesceArgs.length > 1;
+      const fallbackCtx = getFallbackContext(line, pathStr, charOffset);
 
       const rows: string[] = [];
       for (const env of envs) {
@@ -210,28 +214,50 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
           cell = `<span style="color:var(--vscode-descriptionForeground)">${escapeHtml(formatted)} <em>(default)</em></span>`;
         }
 
-        if (inCoalesce && coalesceArgs) {
-          const coalesced = evaluateCoalesce(coalesceArgs, resolved, getValueAtPath);
-          const coalescedFmt = formatValue(coalesced);
-          rows.push(`| ${env} | ${cell} | ${escapeHtml(coalescedFmt)} |`);
+        if (fallbackCtx?.type === 'coalesce') {
+          rows.push(`| ${env} | ${cell} | ${escapeHtml(formatValue(evaluateCoalesce(fallbackCtx.args, resolved, getValueAtPath)))} |`);
+        } else if (fallbackCtx?.type === 'or') {
+          rows.push(`| ${env} | ${cell} | ${escapeHtml(formatValue(evaluateCoalesce(fallbackCtx.args, resolved, getValueAtPath)))} |`);
+        } else if (fallbackCtx?.type === 'default') {
+          rows.push(`| ${env} | ${cell} | ${escapeHtml(formatValue(evaluateDefault(fallbackCtx.info, resolved, getValueAtPath)))} |`);
+        } else if (fallbackCtx?.type === 'ternary') {
+          rows.push(`| ${env} | ${cell} | ${escapeHtml(formatValue(evaluateTernary(fallbackCtx.info, resolved, getValueAtPath)))} |`);
         } else {
           rows.push(`| ${env} | ${cell} |`);
         }
       }
 
-      const tableHeader = inCoalesce
-        ? '| Environment | Value | Coalesced |\n|---|---|---|'
+      const showEffective = fallbackCtx !== null;
+      const tableHeader = showEffective
+        ? '| Environment | Value | Effective |\n|---|---|---|'
         : '| Environment | Value |\n|---|---|';
       const table = [tableHeader, ...rows].join('\n');
 
       const md = new vscode.MarkdownString();
       md.supportHtml = true;
       md.appendMarkdown(`### \`.Values.${pathStr}\`\n\n`);
-      if (inCoalesce && coalesceArgs) {
-        const chain = coalesceArgs
+      if (fallbackCtx?.type === 'coalesce') {
+        const chain = fallbackCtx.args
           .map((a) => (a.type === 'values' ? `.Values.${a.path}` : JSON.stringify(a.value)))
           .join(' → ');
         md.appendMarkdown(`*coalesce chain:* \`${chain}\`\n\n`);
+      } else if (fallbackCtx?.type === 'or') {
+        const chain = fallbackCtx.args
+          .map((a) => (a.type === 'values' ? `.Values.${a.path}` : JSON.stringify(a.value)))
+          .join(' → ');
+        md.appendMarkdown(`*or chain:* \`${chain}\`\n\n`);
+      } else if (fallbackCtx?.type === 'default') {
+        const defStr =
+          fallbackCtx.info.defaultLiteral !== undefined
+            ? JSON.stringify(fallbackCtx.info.defaultLiteral)
+            : `.Values.${fallbackCtx.info.defaultPath}`;
+        md.appendMarkdown(`*default:* \`${escapeHtml(defStr)}\`\n\n`);
+      } else if (fallbackCtx?.type === 'ternary') {
+        const { thenArg, elseArg, conditionArg } = fallbackCtx.info;
+        const thenStr = thenArg.type === 'values' ? `.Values.${thenArg.path}` : JSON.stringify(thenArg.value);
+        const elseStr = elseArg.type === 'values' ? `.Values.${elseArg.path}` : JSON.stringify(elseArg.value);
+        const condStr = conditionArg.type === 'values' ? `.Values.${conditionArg.path}` : JSON.stringify(conditionArg.value);
+        md.appendMarkdown(`*ternary:* \`${thenStr}\` : \`${elseStr}\` when \`${condStr}\`\n\n`);
       }
       md.appendMarkdown(table);
 

@@ -6,7 +6,7 @@ VS Code extension for inspecting Helm values across environments. Hover over `.V
 
 ## Features
 
-- **Values hover**: Hover over `.Values.x.y.z` in `templates/**/*.{yaml,yml,tpl}` → inline table of resolved values across all environments. Works in `{{ .Values.x }}`, `{{- if .Values.x }}`, `{{- with .Values.x }}`, `{{ coalesce .Values.a .Values.b "default" }}` (shows **Coalesced** column), etc. Values that differ from the base are **bold**; missing keys show `⚠ not set`.
+- **Values hover**: Hover over `.Values.x.y.z` in `templates/**/*.{yaml,yml,tpl}` → inline table of resolved values across all environments. Works in `{{ .Values.x }}`, `{{ coalesce .Values.a .Values.b "default" }}`, `{{ or .Values.a .Values.b }}`, `{{ default "x" .Values.foo }}`, `{{ .Values.foo | default .Values.bar }}`, `{{ ternary .Values.a .Values.b .Values.flag }}`, etc. Values that differ from the base are **bold**; missing keys show `⚠ not set`.
 - **Template definition hover**: Hover over `{{ include "template.name" . }}` → shows the `define` block source (file + full definition).
 - **Orphan diagnostics**: Squiggly lines for `.Values` paths not defined in any values file (Error); hint for value keys not referenced in templates (Hint). Right-click any orphan diagnostic → **Add 'prefix' to orphan exclude list** to add to `helmValues.excludeOrphanPrefixes` (e.g. `secrets` for `.Values.secrets.*`). Values passed to dependency charts are considered used if the subchart's templates reference them. When Chart.yaml lists dependencies not found in `charts/`, an informational diagnostic appears with a **Quick Fix** to run `helm dependency update`. Command palette: **Helm: Refresh Diagnostics**, **Helm: Update Dependencies**.
 

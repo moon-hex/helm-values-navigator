@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import * as yaml from 'js-yaml';
-import { isInCoalesceWithFallback } from './coalesce';
+import { hasValuesFallback } from './valuesFallback';
 import { detectLayout } from './layout';
 import { getValuesPathsFromTgz } from './subchartTgz';
 import { getCachedDiagnostics, setCachedDiagnostics } from './valuesCache';
@@ -341,7 +341,7 @@ function runDiagnosticsForFolder(
 
       const line = lines[range.start.line] ?? '';
       const charOffset = range.start.character;
-      if (isInCoalesceWithFallback(line, pathStr, charOffset)) continue;
+      if (hasValuesFallback(line, pathStr, charOffset)) continue;
 
       const resolvedInAnyEnv = Array.from(resolvedByEnv.values()).some(
         (values) => getValueAtPath(values, pathStr) !== undefined

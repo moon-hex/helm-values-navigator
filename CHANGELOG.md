@@ -6,7 +6,11 @@ All notable changes to Helm Values Navigator will be documented in this file.
 
 ### Added
 
-- **Coalesce support**: Hover over `.Values` inside `{{ coalesce .Values.a .Values.b "default" }}` shows a **Coalesced** column with the first non-empty result. Orphan diagnostics skip "unresolved" errors for paths that have a fallback in the coalesce chain.
+- **Coalesce support**: Hover over `.Values` inside `{{ coalesce .Values.a .Values.b "default" }}` shows a **Coalesced** column. Orphan diagnostics skip "unresolved" for paths with a fallback in the coalesce chain.
+- **Default support**: Hover over `.Values` inside `{{ default "x" .Values.foo }}` or `{{ .Values.foo | default "x" }}` shows an **Effective** column. Orphan diagnostics skip "unresolved" for paths that have a default.
+- **Or support**: Hover over `.Values` inside `{{ or .Values.a .Values.b }}` or `{{ or .Values.a "default" }}` (same semantics as 2-arg coalesce). Orphan diagnostics skip "unresolved" when a fallback exists.
+- **Pipeline default**: Support `default` with `.Values` fallback, e.g. `{{ default .Values.bar .Values.foo }}` and `{{ .Values.foo | default .Values.bar }}` (including multi-stage pipelines).
+- **Ternary support**: Hover over `.Values` inside `{{ ternary .Values.a .Values.b .Values.flag }}` shows **Effective** (then/else based on condition). Orphan diagnostics skip "unresolved" for paths in ternary (conditional fallback).
 
 ## [0.1.5] - 2025-03-09
 
