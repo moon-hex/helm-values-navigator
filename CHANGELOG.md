@@ -2,6 +2,12 @@
 
 All notable changes to Helm Values Navigator will be documented in this file.
 
+## [0.1.6] - 2025-03-09
+
+### Added
+
+- **Coalesce support**: Hover over `.Values` inside `{{ coalesce .Values.a .Values.b "default" }}` shows a **Coalesced** column with the first non-empty result. Orphan diagnostics skip "unresolved" errors for paths that have a fallback in the coalesce chain.
+
 ## [0.1.5] - 2025-03-09
 
 ### Fixed

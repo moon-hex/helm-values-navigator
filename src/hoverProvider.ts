@@ -13,6 +13,7 @@ import {
   ValuesResolverContext,
 } from './valuesResolver';
 import { getCached, setCached, type CachedHoverData } from './valuesCache';
+import { evaluateCoalesce, parseCoalesceArgs } from './coalesce';
 
 // Supports: {{ .Values.x }}, {{- if .Values.x }}, {{- with .Values.x }}, etc.
 const VALUES_PATH_REGEX = /\.Values\.([a-zA-Z0-9_.-]+)/g;
@@ -184,6 +185,11 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
           : ['default'];
       const baseVal = getValueAtPath(baseValues, pathStr);
 
+      const line = document.lineAt(position.line).text;
+      const charOffset = line.slice(0, position.character).length;
+      const coalesceArgs = parseCoalesceArgs(line, charOffset);
+      const inCoalesce = coalesceArgs && coalesceArgs.length > 1;
+
       const rows: string[] = [];
       for (const env of envs) {
         const { resolved, overrideOnly } = perEnv.get(env) ?? { resolved: {}, overrideOnly: {} };
@@ -203,18 +209,30 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
         } else {
           cell = `<span style="color:var(--vscode-descriptionForeground)">${escapeHtml(formatted)} <em>(default)</em></span>`;
         }
-        rows.push(`| ${env} | ${cell} |`);
+
+        if (inCoalesce && coalesceArgs) {
+          const coalesced = evaluateCoalesce(coalesceArgs, resolved, getValueAtPath);
+          const coalescedFmt = formatValue(coalesced);
+          rows.push(`| ${env} | ${cell} | ${escapeHtml(coalescedFmt)} |`);
+        } else {
+          rows.push(`| ${env} | ${cell} |`);
+        }
       }
 
-      const table = [
-        '| Environment | Value |',
-        '|---|---|',
-        ...rows,
-      ].join('\n');
+      const tableHeader = inCoalesce
+        ? '| Environment | Value | Coalesced |\n|---|---|---|'
+        : '| Environment | Value |\n|---|---|';
+      const table = [tableHeader, ...rows].join('\n');
 
       const md = new vscode.MarkdownString();
       md.supportHtml = true;
       md.appendMarkdown(`### \`.Values.${pathStr}\`\n\n`);
+      if (inCoalesce && coalesceArgs) {
+        const chain = coalesceArgs
+          .map((a) => (a.type === 'values' ? `.Values.${a.path}` : JSON.stringify(a.value)))
+          .join(' → ');
+        md.appendMarkdown(`*coalesce chain:* \`${chain}\`\n\n`);
+      }
       md.appendMarkdown(table);
 
       return new vscode.Hover(md);
