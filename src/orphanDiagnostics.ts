@@ -23,6 +23,12 @@ const VALUES_PATH_REGEX = /\.Values\.([a-zA-Z0-9_.-]+)/g;
 /** Diagnostic code for missing subchart dependencies - enables Quick Fix. */
 export const MISSING_SUBCHART_DEPS_CODE = 'helmValues.missingSubchartDeps';
 
+/** Extract .Values path from orphan diagnostic message. */
+function getPathFromOrphanDiagnostic(message: string): string | null {
+  const m = message.match(/\.Values\.([a-zA-Z0-9_.-]+)/);
+  return m ? m[1] : null;
+}
+
 function offsetToPosition(text: string, offset: number): vscode.Position {
   const before = text.slice(0, offset);
   const line = (before.match(/\n/g) ?? []).length;
@@ -49,9 +55,15 @@ function extractValuesPathsFromText(
 }
 
 function isExcluded(pathStr: string, excludePrefixes: string[]): boolean {
-  return excludePrefixes.some(
-    (p) => pathStr === p || pathStr.startsWith(p + '.')
-  );
+  return excludePrefixes.some((p) => {
+    if (p.includes('*')) {
+      const re = new RegExp(
+        '^' + p.replace(/\./g, '\\.').replace(/\*/g, '[^.]+') + '(\\.|$)'
+      );
+      return re.test(pathStr);
+    }
+    return pathStr === p || pathStr.startsWith(p + '.');
+  });
 }
 
 /** Find the line and character range for a dotted key path in YAML content (block style, object keys only). */
@@ -611,6 +623,39 @@ export function registerOrphanDiagnostics(
         );
       }
     ),
+    vscode.commands.registerCommand(
+      'helmValues.addToExcludeList',
+      async (
+        prefix: string,
+        scope?: vscode.ConfigurationScope,
+        promptForEdit?: boolean
+      ) => {
+        if (promptForEdit) {
+          const edited = await vscode.window.showInputBox({
+            title: 'Add to orphan exclude list',
+            value: prefix,
+            prompt: 'Edit the path prefix. Use * for one segment (e.g. secrets.*).',
+            validateInput: (v) =>
+              v.trim() ? null : 'Enter a valid path prefix',
+          });
+          if (edited === undefined) return;
+          prefix = edited.trim();
+        }
+        const config = vscode.workspace.getConfiguration('helmValues', scope);
+        const current = config.get<string[]>('excludeOrphanPrefixes') ?? [];
+        if (current.includes(prefix)) {
+          vscode.window.showInformationMessage(`'${prefix}' is already in the exclude list.`);
+          return;
+        }
+        const next = [...current, prefix].sort();
+        await config.update(
+          'excludeOrphanPrefixes',
+          next,
+          scope ? vscode.ConfigurationTarget.WorkspaceFolder : vscode.ConfigurationTarget.Workspace
+        );
+        vscode.window.showInformationMessage(`Added '${prefix}' to helmValues.excludeOrphanPrefixes`);
+      }
+    ),
     vscode.languages.registerCodeActionsProvider(
       { pattern: '**/Chart.yaml' },
       {
@@ -630,6 +675,67 @@ export function registerOrphanDiagnostics(
             arguments: [chartRoot],
           };
           return [action];
+        },
+      }
+    ),
+    vscode.languages.registerCodeActionsProvider(
+      [
+        { pattern: '**/templates/**/*.yaml' },
+        { pattern: '**/templates/**/*.yml' },
+        { pattern: '**/templates/**/*.tpl' },
+        { pattern: '**/values.yaml' },
+        { pattern: '**/values.yml' },
+        { pattern: '**/overrides/*.yaml' },
+        { pattern: '**/overrides/*.yml' },
+      ],
+      {
+        provideCodeActions(document, _range, context) {
+          const folder = vscode.workspace.getWorkspaceFolder(document.uri);
+          if (!folder) return [];
+          const actions: vscode.CodeAction[] = [];
+          const seen = new Set<string>();
+          for (const d of context.diagnostics) {
+            const pathStr = getPathFromOrphanDiagnostic(d.message);
+            if (!pathStr) continue;
+            const prefix = pathStr.split('.')[0];
+            if (!seen.has(prefix)) {
+              seen.add(prefix);
+              const addAction = new vscode.CodeAction(
+                `Add '${prefix}' to orphan exclude list`,
+                vscode.CodeActionKind.QuickFix
+              );
+              addAction.command = {
+                command: 'helmValues.addToExcludeList',
+                title: 'Add to exclude list',
+                arguments: [prefix, folder.uri],
+              };
+              actions.push(addAction);
+              const editAction = new vscode.CodeAction(
+                `Add to exclude list (edit...)`,
+                vscode.CodeActionKind.QuickFix
+              );
+              editAction.command = {
+                command: 'helmValues.addToExcludeList',
+                title: 'Add to exclude list',
+                arguments: [prefix, folder.uri, true],
+              };
+              actions.push(editAction);
+            }
+            if (prefix !== pathStr && !seen.has(pathStr)) {
+              seen.add(pathStr);
+              const a = new vscode.CodeAction(
+                `Add '${pathStr}' to orphan exclude list`,
+                vscode.CodeActionKind.QuickFix
+              );
+              a.command = {
+                command: 'helmValues.addToExcludeList',
+                title: 'Add to exclude list',
+                arguments: [pathStr, folder.uri],
+              };
+              actions.push(a);
+            }
+          }
+          return actions;
         },
       }
     ),

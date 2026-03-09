@@ -2,7 +2,7 @@
   "name": "helm-values-navigator",
   "displayName": "Helm Values Navigator",
   "description": "Hover over .Values in Helm templates to see resolved values across environments. Orphan detection for unused keys and unresolved refs.",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "MichalHajny",
   "repository": {
     "type": "git",
@@ -29,6 +29,10 @@
       {
         "command": "helmValues.updateDependencies",
         "title": "Helm: Update Dependencies"
+      },
+      {
+        "command": "helmValues.addToExcludeList",
+        "title": "Helm: Add to Exclude List"
       }
     ],
     "configuration": {
@@ -63,7 +67,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Value path prefixes to exclude from orphan diagnostics (e.g. global.images)"
+          "description": "Value path prefixes to exclude from orphan diagnostics. Use * for one segment (e.g. secrets.*). Examples: global.images, secrets"
         },
         "helmValues.orphanDiagnosticsEnabled": {
           "type": "boolean",

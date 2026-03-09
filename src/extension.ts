@@ -72,8 +72,8 @@ export function activate(context: vscode.ExtensionContext): void {
   updateStatus();
 
   registerHoverProvider(context);
+  registerCacheInvalidation(context); // Before orphan diagnostics so config change clears cache first
   registerOrphanDiagnostics(context);
-  registerCacheInvalidation(context);
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(updateStatus),

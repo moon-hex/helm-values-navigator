@@ -2,6 +2,12 @@
 
 All notable changes to Helm Values Navigator will be documented in this file.
 
+## [0.1.5] - 2025-03-09
+
+### Added
+
+- **Add to exclude list (Quick Fix)**: Right-click on orphan diagnostics to add path to `helmValues.excludeOrphanPrefixes`. Offers prefix, full path, and "edit..." to customize before adding. **Asterisk support**: Use `*` for one segment (e.g. `secrets.*` matches `secrets.foo` but not `secrets.foo.bar`).
+
 ## [0.1.4] - 2025-03-07
 
 ### Added
