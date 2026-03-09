@@ -201,6 +201,13 @@ function getChartDependencies(
   return { found, expectedNames };
 }
 
+/** Build URI via workspace folder so it matches VS Code's document URIs (fixes Mac/symlink mismatch). */
+function toWorkspaceUri(folder: vscode.WorkspaceFolder, rootPath: string, filePath: string): vscode.Uri {
+  const rel = path.relative(rootPath, filePath).replace(/\\/g, '/');
+  if (rel.startsWith('..')) return vscode.Uri.file(filePath);
+  return vscode.Uri.joinPath(folder.uri, rel);
+}
+
 function runDiagnosticsForFolder(
   folder: vscode.WorkspaceFolder,
   collection: vscode.DiagnosticCollection,
@@ -316,7 +323,7 @@ function runDiagnosticsForFolder(
   const diagnosticsByUri = new Map<string, vscode.Diagnostic[]>();
 
   for (const filePath of templateFiles) {
-    const uri = vscode.Uri.file(filePath);
+    const uri = toWorkspaceUri(folder, rootPath, filePath);
     let content: string;
     try {
       content = fs.readFileSync(filePath, 'utf8');
@@ -350,7 +357,7 @@ function runDiagnosticsForFolder(
 
   // Warn when Chart.yaml lists dependencies but they're not in charts/
   if (expectedNames.length > 0 && dependencies.length < expectedNames.length) {
-    const chartYamlUri = vscode.Uri.file(path.join(chartRoot, 'Chart.yaml'));
+    const chartYamlUri = toWorkspaceUri(folder, rootPath, path.join(chartRoot, 'Chart.yaml'));
     const diag = new vscode.Diagnostic(
       new vscode.Range(0, 0, 0, 80),
       "Subchart dependencies not found in charts/. Run 'helm dependency update' in the chart directory so orphan diagnostics can check subchart template usage.",
@@ -511,7 +518,7 @@ function runDiagnosticsForFolder(
   for (const { filePath, content, keys } of valuesFiles) {
     const unusedInFile = keys.filter((k) => unusedKeysSet.has(k));
     if (unusedInFile.length === 0) continue;
-    const uri = vscode.Uri.file(filePath);
+    const uri = toWorkspaceUri(folder, rootPath, filePath);
     const diags: vscode.Diagnostic[] = [];
     for (const key of unusedInFile) {
       const range = findKeyRangeInYaml(content, key);

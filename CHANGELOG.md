@@ -4,6 +4,10 @@ All notable changes to Helm Values Navigator will be documented in this file.
 
 ## [0.1.5] - 2025-03-09
 
+### Fixed
+
+- **Mac orphan diagnostics**: Use `Uri.joinPath(folder.uri, relativePath)` instead of `Uri.file(absPath)` so diagnostic URIs match VS Code's document URIs (fixes symlink/path normalization on macOS).
+
 ### Added
 
 - **Add to exclude list (Quick Fix)**: Right-click on orphan diagnostics to add path to `helmValues.excludeOrphanPrefixes`. Offers prefix, full path, and "edit..." to customize before adding. **Asterisk support**: Use `*` for one segment (e.g. `secrets.*` matches `secrets.foo` but not `secrets.foo.bar`).
