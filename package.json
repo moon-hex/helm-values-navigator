@@ -6,7 +6,7 @@
   "publisher": "MichalHajny",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/helm-values-navigator"
+    "url": "https://github.com/moon-hex/helm-values-navigator"
   },
   "license": "Apache-2.0",
   "icon": "images/icon.png",
