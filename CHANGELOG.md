@@ -2,6 +2,12 @@
 
 All notable changes to Helm Values Navigator will be documented in this file.
 
+## [0.1.7] - 2025-03-07
+
+### Changed
+
+- **Bundled extension**: Extension is now bundled with esbuild into a single file (`dist/extension.js`). Reduces packaged size and improves load time (152 files → ~17).
+
 ## [0.1.6] - 2025-03-09
 
 ### Added

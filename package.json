@@ -2,7 +2,7 @@
   "name": "helm-values-navigator",
   "displayName": "Helm Values Navigator",
   "description": "Hover over .Values in Helm templates to see resolved values across environments. Orphan detection for unused keys and unresolved refs.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "MichalHajny",
   "repository": {
     "type": "git",
@@ -19,7 +19,7 @@
   "activationEvents": [
     "workspaceContains:**/Chart.yaml"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -94,15 +94,18 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "check-types": "tsc --noEmit",
+    "compile": "npm run check-types && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "build": "npm run check-types && node esbuild.js --production",
+    "vscode:prepublish": "npm run build",
     "package": "vsce package"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.74.0",
+    "esbuild": "^0.24.0",
     "typescript": "^5.3.0"
   },
   "dependencies": {

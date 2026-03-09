@@ -2,7 +2,7 @@
 
 VS Code extension for inspecting Helm values across environments. Hover over `.Values` references to see resolved values per environment; hover over `include` calls to see template definitions. Orphan diagnostics for unresolved refs and unused keys.
 
-![Screenshot](https://github.com/moon-hex/helm-values-navigator/blob/main/images/screenshot.png)
+![Screenshot](https://github.com/moon-hex/helm-values-navigator/blob/main/images/screenshot.png?raw=true)
 
 ## Features
 
