@@ -74,18 +74,85 @@ export function findTemplateDefinition(
 
   walk(templatesDir);
 
+  const escaped = templateName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const defineRe = new RegExp(
+    `\\{\\{-?\\s*define\\s+"${escaped}"\\s*-?\\}\\}`,
+    'i'
+  );
+
   for (const file of files) {
     try {
       const content = fs.readFileSync(file, 'utf8');
-      const defineMatch = content.match(new RegExp(
-        `\\{\\{-?\\s*define\\s+"${templateName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"\\s*-?\\}\\}`,
-        'i'
-      ));
+      const defineMatch = content.match(defineRe);
       if (defineMatch && defineMatch.index !== undefined) {
         const block = extractDefineBlock(content, defineMatch.index);
         if (block) {
           return { content: block, file: path.basename(file) };
         }
+      }
+    } catch {
+      // Skip
+    }
+  }
+  return null;
+}
+
+/**
+ * Find the file and range of a template define. For go-to-definition.
+ */
+export function findTemplateDefinitionLocation(
+  templateName: string,
+  templatesDir: string
+): { filePath: string; range: { line: number; startChar: number; endChar: number } } | null {
+  const ext = ['.yaml', '.yml', '.tpl'];
+  const files: string[] = [];
+
+  function walk(dir: string): void {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== 'charts') {
+            walk(fullPath);
+          }
+        } else if (ext.some((e) => entry.name.endsWith(e))) {
+          files.push(fullPath);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  walk(templatesDir);
+
+  const escaped = templateName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const defineRe = new RegExp(
+    `\\{\\{-?\\s*define\\s+"(${escaped})"\\s*-?\\}\\}`,
+    'i'
+  );
+
+  for (const filePath of files) {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const defineMatch = content.match(defineRe);
+      if (defineMatch && defineMatch.index !== undefined && defineMatch[1]) {
+        const matchStart = defineMatch.index;
+        const nameInFile = defineMatch[1]; // actual name (may differ in case)
+        const nameOffset = defineMatch[0].indexOf(`"${nameInFile}"`) + 1; // +1 past opening quote
+        const nameStart = matchStart + nameOffset;
+        const nameEnd = nameStart + nameInFile.length;
+        const before = content.slice(0, nameStart);
+        const lines = before.split(/\r?\n/);
+        const line = lines.length - 1;
+        const lastLine = lines[lines.length - 1] ?? '';
+        const startChar = nameStart - (before.length - lastLine.length);
+        const endChar = startChar + nameInFile.length;
+        return {
+          filePath,
+          range: { line, startChar, endChar },
+        };
       }
     } catch {
       // Skip

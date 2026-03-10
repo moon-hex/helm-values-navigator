@@ -7,6 +7,7 @@ import { detectLayout } from './layout';
 import { getValuesPathsFromTgz } from './subchartTgz';
 import { getCachedDiagnostics, setCachedDiagnostics } from './valuesCache';
 import {
+  findKeyRangeInYaml,
   flattenLeafKeys,
   getBaseValues,
   getOverrideOnlyValues,
@@ -65,49 +66,6 @@ function isExcluded(pathStr: string, excludePrefixes: string[]): boolean {
     }
     return pathStr === p || pathStr.startsWith(p + '.');
   });
-}
-
-/** Find the line and character range for a dotted key path in YAML content (block style, object keys only). */
-function findKeyRangeInYaml(
-  content: string,
-  dottedPath: string
-): { line: number; startChar: number; endChar: number } | null {
-  const lines = content.split('\n');
-  const pathParts: string[] = [];
-  const indentStack: number[] = [-1];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const lineTrimmed = line.trimStart();
-    if (lineTrimmed === '' || lineTrimmed.startsWith('#')) continue;
-
-    const indent = line.length - lineTrimmed.length;
-    const keyMatch = lineTrimmed.match(/^([a-zA-Z0-9_.-]+)\s*:/);
-    if (!keyMatch) continue;
-
-    const key = keyMatch[1];
-    const keyStart = line.indexOf(key);
-    const keyEnd = keyStart + key.length;
-
-    while (indentStack.length > 1 && indent <= indentStack[indentStack.length - 1]) {
-      indentStack.pop();
-      pathParts.pop();
-    }
-
-    pathParts.push(key);
-    indentStack.push(indent);
-
-    const currentPath = pathParts.join('.');
-    if (currentPath === dottedPath) {
-      return { line: i, startChar: keyStart, endChar: keyEnd };
-    }
-
-    if (!dottedPath.startsWith(currentPath + '.')) {
-      pathParts.pop();
-      indentStack.pop();
-    }
-  }
-  return null;
 }
 
 function deepMerge(

@@ -238,6 +238,49 @@ export function getOverrideOnlyValuesCustom(
   return loadYamlFile(valuesFilePath) ?? {};
 }
 
+/** Find the line and character range for a dotted key path in YAML content. */
+export function findKeyRangeInYaml(
+  content: string,
+  dottedPath: string
+): { line: number; startChar: number; endChar: number } | null {
+  const lines = content.split(/\r?\n/);
+  const pathParts: string[] = [];
+  const indentStack: number[] = [-1];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineTrimmed = line.trimStart();
+    if (lineTrimmed === '' || lineTrimmed.startsWith('#')) continue;
+
+    const indent = line.length - lineTrimmed.length;
+    const keyMatch = lineTrimmed.match(/^([a-zA-Z0-9_.-]+)\s*:/);
+    if (!keyMatch) continue;
+
+    const key = keyMatch[1];
+    const keyStart = line.indexOf(key);
+    const keyEnd = keyStart + key.length;
+
+    while (indentStack.length > 1 && indent <= indentStack[indentStack.length - 1]) {
+      indentStack.pop();
+      pathParts.pop();
+    }
+
+    pathParts.push(key);
+    indentStack.push(indent);
+
+    const currentPath = pathParts.join('.');
+    if (currentPath === dottedPath) {
+      return { line: i, startChar: keyStart, endChar: keyEnd };
+    }
+
+    if (!dottedPath.startsWith(currentPath + '.')) {
+      pathParts.pop();
+      indentStack.pop();
+    }
+  }
+  return null;
+}
+
 /** Get value at dotted path (e.g. "global.nolo.cache.endpoint.ip"). Returns undefined if not found. */
 export function getValueAtPath(
   obj: Record<string, unknown>,
@@ -285,6 +328,57 @@ export function getBaseValues(
 ): Record<string, unknown> {
   const basePath = path.join(workspaceRoot, chartPath, baseValuesFile);
   return loadYamlFile(basePath) ?? {};
+}
+
+/** Collect all values file paths for a layout (for go-to-definition). */
+export function getValuesFilePaths(
+  rootPath: string,
+  chartPath: string,
+  baseValuesFile: string,
+  layout: {
+    layout: string;
+    valueFileTemplates?: string[];
+    environments?: string[];
+    overridesDir?: string;
+    valuesBasePath?: string;
+    valuesFilePattern?: string;
+  },
+  secretsFilePath?: string
+): string[] {
+  const chartRoot = path.join(rootPath, chartPath);
+  const basePath = path.join(chartRoot, baseValuesFile);
+  const paths = new Set<string>();
+  paths.add(basePath);
+
+  const envs = layout.environments ?? ['default'];
+
+  if (layout.layout === 'helmfile' && layout.valueFileTemplates) {
+    for (const env of envs) {
+      for (const template of layout.valueFileTemplates) {
+        let filePath = path.join(rootPath, resolveValueFileTemplate(template, env));
+        if (secretsFilePath && /secrets\.(yaml|yml)$/i.test(resolveValueFileTemplate(template, 'x'))) {
+          filePath = path.isAbsolute(secretsFilePath)
+            ? secretsFilePath
+            : path.join(rootPath, secretsFilePath);
+        }
+        paths.add(filePath);
+      }
+    }
+  } else if (layout.layout === 'override-folder' && layout.overridesDir) {
+    const overrideDir = path.join(chartRoot, layout.overridesDir);
+    for (const env of envs) {
+      paths.add(path.join(overrideDir, `${env}.yaml`));
+      paths.add(path.join(overrideDir, `${env}.yml`));
+    }
+  } else if (layout.layout === 'custom' && layout.valuesBasePath && layout.valuesFilePattern) {
+    for (const env of envs) {
+      paths.add(
+        path.join(rootPath, layout.valuesBasePath, layout.valuesFilePattern.replace(/{env}/g, env))
+      );
+    }
+  }
+
+  return [...paths];
 }
 
 export function getResolvedValuesOverrideFolder(
