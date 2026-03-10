@@ -68,10 +68,10 @@ function isExcluded(pathStr: string, excludePrefixes: string[]): boolean {
   });
 }
 
-type ChartDep = { name: string; chartDir?: string; tgzPath?: string };
+export type ChartDep = { name: string; chartDir?: string; tgzPath?: string };
 
 /** Parse Chart.yaml and return dependency names with their chart dirs or tgz paths. */
-function getChartDependencies(
+export function getChartDependencies(
   chartRoot: string
 ): { found: ChartDep[]; expectedNames: string[] } {
   const chartYamlPath = path.join(chartRoot, 'Chart.yaml');

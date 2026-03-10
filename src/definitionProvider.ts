@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { detectLayout, getContainingChart } from './layout';
 import { findTemplateDefinitionLocation, getTemplatesDir } from './templateFinder';
+import { getChartDependencies } from './orphanDiagnostics';
 import { findKeyRangeInYaml, getValuesFilePaths } from './valuesResolver';
 
 const VALUES_PATH_REGEX = /\.Values\.([a-zA-Z0-9_.-]+)/g;
@@ -43,11 +44,24 @@ function extractIncludeTemplateNameAtPosition(
   return null;
 }
 
+function getWordAtPosition(document: vscode.TextDocument, position: vscode.Position): string | null {
+  const line = document.lineAt(position.line).text;
+  const char = position.character;
+  if (char < 0 || char > line.length) return null;
+  let i = char - 1;
+  while (i >= 0 && /[a-zA-Z0-9_.-]/.test(line[i])) i--;
+  let k = char;
+  while (k < line.length && /[a-zA-Z0-9_.-]/.test(line[k])) k++;
+  const word = line.slice(i + 1, k);
+  return word.length > 0 ? word : null;
+}
+
 export function registerDefinitionProvider(context: vscode.ExtensionContext): void {
   const selector: vscode.DocumentSelector = [
     { pattern: '**/templates/**/*.yaml' },
     { pattern: '**/templates/**/*.yml' },
     { pattern: '**/templates/**/*.tpl' },
+    { pattern: '**/Chart.yaml' },
   ];
 
   const provider: vscode.DefinitionProvider = {
@@ -57,6 +71,23 @@ export function registerDefinitionProvider(context: vscode.ExtensionContext): vo
     ): vscode.Definition | vscode.LocationLink[] | null {
       const folder = vscode.workspace.getWorkspaceFolder(document.uri);
       if (!folder) return null;
+
+      // Chart.yaml: dependency name → go to subchart Chart.yaml (if chartDir, not tgz)
+      if (document.fileName.endsWith('Chart.yaml') || document.uri.fsPath.endsWith(path.sep + 'Chart.yaml')) {
+        const chartRoot = path.dirname(document.uri.fsPath);
+        const { found: deps } = getChartDependencies(chartRoot);
+        const word = getWordAtPosition(document, position);
+        if (word) {
+          const dep = deps.find((d) => d.name === word && d.chartDir);
+          if (dep?.chartDir) {
+            const targetPath = path.join(dep.chartDir, 'Chart.yaml');
+            if (fs.existsSync(targetPath)) {
+              return new vscode.Location(vscode.Uri.file(targetPath), new vscode.Range(0, 0, 0, 0));
+            }
+          }
+        }
+        return null;
+      }
 
       // Include "template.name" → go to define
       const templateName = extractIncludeTemplateNameAtPosition(document, position);

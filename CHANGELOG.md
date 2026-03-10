@@ -2,13 +2,19 @@
 
 All notable changes to Helm Values Navigator will be documented in this file.
 
-## [0.5.0] - 2025-03-09
+## [0.5.1] - 2025-03-10
+
+### Added
+
+- **Clickable dependencies in Chart.yaml**: Ctrl+click on a subchart dependency name (when it's a directory in `charts/`, not .tgz) jumps to the subchart's Chart.yaml.
+
+## [0.5.0] - 2025-03-10
 
 ### Added
 
 - **Subchart support (in-repo)**: Subcharts in a chart's `charts/` folder (managed in repo, not .tgz) are now discovered and evaluated as independent charts. Hover, completion, and orphan diagnostics work when editing subchart templates. .tgz packages remain ignored as charts (read for values only).
 
-## [0.4.0] - 2025-03-09
+## [0.4.0] - 2025-03-10
 
 ### Added
 
