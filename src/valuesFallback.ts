@@ -2,9 +2,6 @@
 
 export type FallbackArg = { type: 'values'; path: string } | { type: 'literal'; value: string };
 
-/** @deprecated Use FallbackArg */
-export type CoalesceArg = FallbackArg;
-
 export interface DefaultInfo {
   path: string;
   defaultLiteral?: string;
@@ -44,17 +41,6 @@ function tokenizeArgs(argsStr: string): FallbackArg[] {
   }
   tokens.sort((a, b) => a.pos - b.pos);
   return tokens.map((t) => t.arg);
-}
-
-/** Parse coalesce args from template body. Returns null if not a coalesce. */
-export function parseCoalesceArgs(line: string, charOffset: number): FallbackArg[] | null {
-  return parseFallbackArgs(line, charOffset, 'coalesce');
-}
-
-/** Parse or args (2-arg coalesce). Returns null if not an or. */
-export function parseOrArgs(line: string, charOffset: number): FallbackArg[] | null {
-  const args = parseFallbackArgs(line, charOffset, 'or');
-  return args && args.length >= 2 ? args : null;
 }
 
 export type FallbackContext =
@@ -116,26 +102,6 @@ function extractBlockAndArgs(
   return { argsStr, args: null, fn: '' };
 }
 
-/** Returns true if the path at charOffset is in a coalesce with at least one fallback after it. */
-export function isInCoalesceWithFallback(
-  line: string,
-  pathStr: string,
-  charOffset: number
-): boolean {
-  const ctx = getFallbackContext(line, pathStr, charOffset);
-  return ctx?.type === 'coalesce';
-}
-
-/** Returns true if the path at charOffset is in an or with a fallback. */
-export function isInOrWithFallback(
-  line: string,
-  pathStr: string,
-  charOffset: number
-): boolean {
-  const ctx = getFallbackContext(line, pathStr, charOffset);
-  return ctx?.type === 'or';
-}
-
 /** Parse default expression. Handles: default "x" .Values.foo and .Values.foo | default "x" */
 export function parseDefault(line: string, pathStr: string, charOffset: number): DefaultInfo | null {
   const valuesDotPath = `.Values.${pathStr}`;
@@ -178,11 +144,6 @@ export function parseDefault(line: string, pathStr: string, charOffset: number):
   return null;
 }
 
-/** Returns true if the path has a default fallback. */
-export function hasDefaultFallback(line: string, pathStr: string, charOffset: number): boolean {
-  return getFallbackContext(line, pathStr, charOffset)?.type === 'default';
-}
-
 export function evaluateDefault(
   info: DefaultInfo,
   resolved: Record<string, unknown>,
@@ -223,17 +184,6 @@ export interface TernaryInfo {
   thenArg: FallbackArg;
   elseArg: FallbackArg;
   conditionArg: FallbackArg;
-}
-
-/** Parse ternary: ternary thenVal elseVal condition. Returns null if not a ternary. */
-export function parseTernary(line: string, pathStr: string, charOffset: number): TernaryInfo | null {
-  const ctx = getFallbackContext(line, pathStr, charOffset);
-  return ctx?.type === 'ternary' ? ctx.info : null;
-}
-
-/** Returns true if the path is in a ternary (has conditional fallback). */
-export function isInTernary(line: string, pathStr: string, charOffset: number): boolean {
-  return getFallbackContext(line, pathStr, charOffset)?.type === 'ternary';
 }
 
 function evalArg(

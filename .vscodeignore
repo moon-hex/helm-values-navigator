@@ -6,7 +6,8 @@ src
 .gitignore
 tsconfig.json
 esbuild.js
-#build.ps1
+build.ps1
+build.notes
 **/*.map
 **/*.ts
 **/*.d.ts
