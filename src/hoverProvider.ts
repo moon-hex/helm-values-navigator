@@ -1,5 +1,6 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { detectLayout } from './layout';
+import { detectLayout, getContainingChart } from './layout';
 import { findTemplateDefinition, getTemplatesDir } from './templateFinder';
 import {
   getBaseValues,
@@ -12,7 +13,7 @@ import {
   getValueAtPath,
   ValuesResolverContext,
 } from './valuesResolver';
-import { getCached, setCached, type CachedHoverData } from './valuesCache';
+import { cacheKey, getCached, setCached, type CachedHoverData } from './valuesCache';
 import {
   evaluateCoalesce,
   evaluateDefault,
@@ -100,8 +101,13 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
       const folder = vscode.workspace.getWorkspaceFolder(document.uri);
       if (!folder) return null;
 
+      const chartDir = getContainingChart(folder, document.uri.fsPath);
+      if (!chartDir) return null;
+
       const config = vscode.workspace.getConfiguration('helmValues', folder.uri);
-      let cached: CachedHoverData | null = getCached(folder.uri.toString());
+      const chartPathRel = path.relative(folder.uri.fsPath, chartDir).replace(/\\/g, '/');
+      const key = cacheKey(folder.uri.toString(), chartPathRel);
+      let cached: CachedHoverData | null = getCached(key);
 
       if (!cached) {
         const layout = detectLayout(folder, {
@@ -112,7 +118,9 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
           environments: config.get<string[]>('environments'),
           valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
           valuesFilePattern: config.get<string>('valuesFilePattern'),
-        });
+        },
+        chartDir
+        );
         if (!layout) return null;
 
         const envs =
@@ -180,7 +188,7 @@ export function registerHoverProvider(context: vscode.ExtensionContext): void {
           perEnv.set(env, { resolved: resolved.values, overrideOnly });
         }
         cached = { layout, baseValues, perEnv };
-        setCached(folder.uri.toString(), cached);
+        setCached(key, cached);
       }
 
       const { layout, baseValues, perEnv } = cached;

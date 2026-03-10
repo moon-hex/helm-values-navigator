@@ -1,7 +1,8 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { detectLayout } from './layout';
+import { detectLayout, getContainingChart } from './layout';
 import { getTemplatesDir, listTemplateNames } from './templateFinder';
-import { getCached, setCached, type CachedHoverData } from './valuesCache';
+import { cacheKey, getCached, setCached, type CachedHoverData } from './valuesCache';
 import {
   flattenLeafKeys,
   getBaseValues,
@@ -85,8 +86,13 @@ export function registerCompletionProvider(context: vscode.ExtensionContext): vo
       const valuesCtx = getValuesPrefixAtPosition(document, position);
       if (!valuesCtx) return null;
 
+      const chartDir = getContainingChart(folder, document.uri.fsPath);
+      if (!chartDir) return null;
+
       const config = vscode.workspace.getConfiguration('helmValues', folder.uri);
-      let cached: CachedHoverData | null = getCached(folder.uri.toString());
+      const chartPathRel = path.relative(folder.uri.fsPath, chartDir).replace(/\\/g, '/');
+      const key = cacheKey(folder.uri.toString(), chartPathRel);
+      let cached: CachedHoverData | null = getCached(key);
 
       if (!cached) {
         const layout = detectLayout(folder, {
@@ -97,7 +103,9 @@ export function registerCompletionProvider(context: vscode.ExtensionContext): vo
           environments: config.get<string[]>('environments'),
           valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
           valuesFilePattern: config.get<string>('valuesFilePattern'),
-        });
+        },
+        chartDir
+        );
         if (!layout) return null;
 
         const envs =
@@ -165,7 +173,7 @@ export function registerCompletionProvider(context: vscode.ExtensionContext): vo
           perEnv.set(env, { resolved: resolved.values, overrideOnly });
         }
         cached = { layout, baseValues, perEnv };
-        setCached(folder.uri.toString(), cached);
+        setCached(key, cached);
       }
 
       const { baseValues, perEnv } = cached;

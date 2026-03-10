@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { detectLayout } from './layout';
+import { detectLayout, getContainingChart } from './layout';
 import { findTemplateDefinitionLocation, getTemplatesDir } from './templateFinder';
 import { findKeyRangeInYaml, getValuesFilePaths } from './valuesResolver';
 
@@ -83,6 +83,9 @@ export function registerDefinitionProvider(context: vscode.ExtensionContext): vo
       const pathStr = extractValuesPathAtPosition(document, position);
       if (!pathStr) return null;
 
+      const chartDir = getContainingChart(folder, document.uri.fsPath);
+      if (!chartDir) return null;
+
       const config = vscode.workspace.getConfiguration('helmValues', folder.uri);
       const layout = detectLayout(folder, {
         helmfilePath: config.get<string>('helmfilePath') ?? 'helmfile.yaml',
@@ -92,7 +95,7 @@ export function registerDefinitionProvider(context: vscode.ExtensionContext): vo
         environments: config.get<string[]>('environments'),
         valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
         valuesFilePattern: config.get<string>('valuesFilePattern'),
-      });
+      }, chartDir);
       if (!layout) return null;
 
       const layoutForPaths =

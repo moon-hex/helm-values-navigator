@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as yaml from 'js-yaml';
 import { hasValuesFallback } from './valuesFallback';
-import { detectLayout } from './layout';
+import { detectLayout, findChartYamlPaths } from './layout';
 import { getValuesPathsFromTgz } from './subchartTgz';
 import { getCachedDiagnostics, setCachedDiagnostics } from './valuesCache';
 import {
@@ -66,33 +66,6 @@ function isExcluded(pathStr: string, excludePrefixes: string[]): boolean {
     }
     return pathStr === p || pathStr.startsWith(p + '.');
   });
-}
-
-function deepMerge(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>
-): Record<string, unknown> {
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    const srcVal = source[key];
-    const tgtVal = result[key];
-    if (
-      typeof srcVal === 'object' &&
-      srcVal !== null &&
-      !Array.isArray(srcVal) &&
-      typeof tgtVal === 'object' &&
-      tgtVal !== null &&
-      !Array.isArray(tgtVal)
-    ) {
-      result[key] = deepMerge(
-        tgtVal as Record<string, unknown>,
-        srcVal as Record<string, unknown>
-      );
-    } else {
-      result[key] = srcVal;
-    }
-  }
-  return result;
 }
 
 type ChartDep = { name: string; chartDir?: string; tgzPath?: string };
@@ -167,31 +140,23 @@ function toWorkspaceUri(folder: vscode.WorkspaceFolder, rootPath: string, filePa
   return vscode.Uri.joinPath(folder.uri, rel);
 }
 
-function runDiagnosticsForFolder(
+function runDiagnosticsForLayout(
   folder: vscode.WorkspaceFolder,
-  collection: vscode.DiagnosticCollection,
   config: {
-    helmfilePath: string;
-    chartPath?: string;
     baseValuesFile: string;
     overridesDir: string;
-    environments?: string[];
     valuesBasePath?: string;
     valuesFilePattern?: string;
     secretsFilePath?: string;
     excludeOrphanPrefixes: string[];
-  }
-): Map<string, vscode.Diagnostic[]> | undefined {
-  const layout = detectLayout(folder, {
-    helmfilePath: config.helmfilePath,
-    chartPath: config.chartPath,
-    baseValuesFile: config.baseValuesFile,
-    overridesDir: config.overridesDir,
-    environments: config.environments,
-    valuesBasePath: config.valuesBasePath,
-    valuesFilePattern: config.valuesFilePattern,
-  });
-  if (!layout) return undefined;
+  },
+  layout: import('./layout').ResolvedLayout
+): Map<string, vscode.Diagnostic[]> {
+  const rootPath = layout.rootPath;
+  const chartPath = layout.chartPath;
+  const chartRoot = path.join(rootPath, chartPath);
+  const templatesDir = path.join(chartRoot, 'templates');
+  const baseValuesPath = path.join(chartRoot, config.baseValuesFile);
 
   const envs =
     layout.layout === 'helmfile' ||
@@ -200,14 +165,8 @@ function runDiagnosticsForFolder(
       ? layout.environments
       : ['default'];
 
-  const rootPath = layout.rootPath;
-  const chartPath = layout.chartPath;
-  const chartRoot = path.join(rootPath, chartPath);
-  const templatesDir = path.join(chartRoot, 'templates');
-  const baseValuesPath = path.join(chartRoot, config.baseValuesFile);
-
   if (!fs.existsSync(templatesDir) || !fs.statSync(templatesDir).isDirectory()) {
-    return undefined;
+    return new Map();
   }
 
   // Collect all template files
@@ -505,11 +464,69 @@ function runDiagnosticsForFolder(
     }
   }
 
-  // Update collection for this folder's files
-  for (const [uriStr, diags] of diagnosticsByUri) {
+  return diagnosticsByUri;
+}
+
+function runDiagnosticsForFolder(
+  folder: vscode.WorkspaceFolder,
+  collection: vscode.DiagnosticCollection,
+  config: {
+    helmfilePath: string;
+    chartPath?: string;
+    baseValuesFile: string;
+    overridesDir: string;
+    environments?: string[];
+    valuesBasePath?: string;
+    valuesFilePattern?: string;
+    secretsFilePath?: string;
+    excludeOrphanPrefixes: string[];
+  }
+): Map<string, vscode.Diagnostic[]> | undefined {
+  const rootPath = folder.uri.fsPath;
+  const layoutConfig = {
+    helmfilePath: config.helmfilePath,
+    chartPath: config.chartPath,
+    baseValuesFile: config.baseValuesFile,
+    overridesDir: config.overridesDir,
+    environments: config.environments,
+    valuesBasePath: config.valuesBasePath,
+    valuesFilePattern: config.valuesFilePattern,
+  };
+
+  let chartDirs = findChartYamlPaths(folder);
+  if (chartDirs.length === 0) {
+    const layout = detectLayout(folder, layoutConfig);
+    if (layout) {
+      chartDirs = [path.join(rootPath, layout.chartPath)];
+    } else {
+      return undefined;
+    }
+  }
+
+  const merged = new Map<string, vscode.Diagnostic[]>();
+  for (const chartDir of chartDirs) {
+    const layout = detectLayout(folder, layoutConfig, chartDir);
+    if (!layout) continue;
+
+    const layoutConfigSlice = {
+      baseValuesFile: config.baseValuesFile,
+      overridesDir: config.overridesDir,
+      valuesBasePath: config.valuesBasePath,
+      valuesFilePattern: config.valuesFilePattern,
+      secretsFilePath: config.secretsFilePath,
+      excludeOrphanPrefixes: config.excludeOrphanPrefixes,
+    };
+    const result = runDiagnosticsForLayout(folder, layoutConfigSlice, layout);
+    for (const [uriStr, diags] of result) {
+      const existing = merged.get(uriStr) ?? [];
+      merged.set(uriStr, [...existing, ...diags]);
+    }
+  }
+
+  for (const [uriStr, diags] of merged) {
     collection.set(vscode.Uri.parse(uriStr), diags);
   }
-  return diagnosticsByUri;
+  return merged;
 }
 
 export function registerOrphanDiagnostics(

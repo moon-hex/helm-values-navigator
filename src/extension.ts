@@ -1,5 +1,6 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { detectLayout } from './layout';
+import { detectLayout, findChartYamlPaths, getContainingChart } from './layout';
 import { registerCompletionProvider } from './completionProvider';
 import { registerDefinitionProvider } from './definitionProvider';
 import { registerHoverProvider } from './hoverProvider';
@@ -43,9 +44,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     let envCount = 0;
+    let chartCount = 0;
     for (const folder of workspaceFolders) {
       const config = getConfig(folder);
-      const layout = detectLayout(folder, {
+      const layoutConfig = {
         helmfilePath: config.helmfilePath,
         chartPath: config.chartPath,
         baseValuesFile: config.baseValuesFile,
@@ -53,18 +55,29 @@ export function activate(context: vscode.ExtensionContext): void {
         environments: config.environments,
         valuesBasePath: config.valuesBasePath,
         valuesFilePattern: config.valuesFilePattern,
-      });
-      if (layout) {
-        if (layout.layout === 'helmfile' || layout.layout === 'override-folder' || layout.layout === 'custom') {
-          envCount += layout.environments.length;
-        } else {
-          envCount += 1; // standalone = 1 env
+      };
+      const chartDirs = findChartYamlPaths(folder);
+      const toProcess = chartDirs.length > 0
+        ? chartDirs
+        : (() => {
+            const layout = detectLayout(folder, layoutConfig);
+            return layout ? [path.join(folder.uri.fsPath, layout.chartPath)] : [];
+          })();
+      for (const chartDir of toProcess) {
+        const layout = detectLayout(folder, layoutConfig, chartDir);
+        if (layout) {
+          chartCount++;
+          if (layout.layout === 'helmfile' || layout.layout === 'override-folder' || layout.layout === 'custom') {
+            envCount += layout.environments.length;
+          } else {
+            envCount += 1; // standalone = 1 env
+          }
         }
       }
     }
 
-    if (envCount > 0) {
-      statusBar.text = `Helm: ${envCount} env${envCount === 1 ? '' : 's'}`;
+    if (chartCount > 0) {
+      statusBar.text = `Helm: ${chartCount} chart${chartCount === 1 ? '' : 's'}, ${envCount} env${envCount === 1 ? '' : 's'}`;
     } else {
       statusBar.text = 'Helm: no chart';
     }
@@ -95,6 +108,9 @@ export function resolveValuesForEnv(
   const folder = vscode.workspace.getWorkspaceFolder(docUri);
   if (!folder) return null;
 
+  const chartDir = getContainingChart(folder, docUri.fsPath);
+  if (!chartDir) return null;
+
   const config = vscode.workspace.getConfiguration('helmValues', folder.uri);
   const layout = detectLayout(folder, {
     helmfilePath: config.get<string>('helmfilePath') ?? 'helmfile.yaml',
@@ -104,7 +120,7 @@ export function resolveValuesForEnv(
     environments: config.get<string[]>('environments'),
     valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
     valuesFilePattern: config.get<string>('valuesFilePattern'),
-  });
+  }, chartDir);
 
   if (!layout) return null;
 
@@ -158,6 +174,9 @@ export function getEnvNames(docUri: vscode.Uri): string[] {
   const folder = vscode.workspace.getWorkspaceFolder(docUri);
   if (!folder) return [];
 
+  const chartDir = getContainingChart(folder, docUri.fsPath);
+  if (!chartDir) return [];
+
   const config = vscode.workspace.getConfiguration('helmValues', folder.uri);
   const layout = detectLayout(folder, {
     helmfilePath: config.get<string>('helmfilePath') ?? 'helmfile.yaml',
@@ -167,7 +186,7 @@ export function getEnvNames(docUri: vscode.Uri): string[] {
     environments: config.get<string[]>('environments'),
     valuesBasePath: config.get<string>('valuesBasePath') ?? '.',
     valuesFilePattern: config.get<string>('valuesFilePattern'),
-  });
+  }, chartDir);
 
   if (!layout) return [];
   if (layout.layout === 'helmfile' || layout.layout === 'override-folder' || layout.layout === 'custom') {

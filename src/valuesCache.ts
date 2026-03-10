@@ -11,6 +11,11 @@ export interface CachedHoverData {
 const hoverCache = new Map<string, CachedHoverData>();
 const diagnosticsCache = new Map<string, Map<string, vscode.Diagnostic[]>>();
 
+/** Cache key: folderUri or folderUri + chartPath for multi-chart. */
+export function cacheKey(folderUri: string, chartPath?: string): string {
+  return chartPath ? `${folderUri}::${chartPath}` : folderUri;
+}
+
 function isRelevantForInvalidation(doc: vscode.TextDocument): boolean {
   const p = doc.uri.fsPath;
   const sep = path.sep;
@@ -25,12 +30,12 @@ function isRelevantForInvalidation(doc: vscode.TextDocument): boolean {
   );
 }
 
-export function getCached(folderUri: string): CachedHoverData | null {
-  return hoverCache.get(folderUri) ?? null;
+export function getCached(key: string): CachedHoverData | null {
+  return hoverCache.get(key) ?? null;
 }
 
-export function setCached(folderUri: string, data: CachedHoverData): void {
-  hoverCache.set(folderUri, data);
+export function setCached(key: string, data: CachedHoverData): void {
+  hoverCache.set(key, data);
 }
 
 export function getCachedDiagnostics(folderUri: string): Map<string, vscode.Diagnostic[]> | null {
@@ -45,9 +50,14 @@ export function invalidateForDocument(doc: vscode.TextDocument): void {
   if (!isRelevantForInvalidation(doc)) return;
   const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
   if (folder) {
-    const key = folder.uri.toString();
-    hoverCache.delete(key);
-    diagnosticsCache.delete(key);
+    const folderKey = folder.uri.toString();
+    // Invalidate all cache entries for this folder (single-chart and multi-chart)
+    for (const key of hoverCache.keys()) {
+      if (key === folderKey || key.startsWith(folderKey + '::')) {
+        hoverCache.delete(key);
+      }
+    }
+    diagnosticsCache.delete(folderKey);
   }
 }
 

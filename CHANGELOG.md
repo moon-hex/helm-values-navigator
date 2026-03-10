@@ -2,6 +2,12 @@
 
 All notable changes to Helm Values Navigator will be documented in this file.
 
+## [0.4.0] - 2025-03-09
+
+### Added
+
+- **Multi-chart support**: Workspaces with multiple Helm charts (e.g. `charts/module2`, `charts/other`) are evaluated separately. Hover, go-to-definition, completion, and orphan diagnostics use the chart that contains the current document. Status bar shows chart and env counts.
+
 ## [0.3.0] - 2025-03-09
 
 ### Added

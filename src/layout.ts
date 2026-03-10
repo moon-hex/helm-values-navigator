@@ -41,7 +41,8 @@ export interface CustomInfo extends ChartInfo {
 
 export type ResolvedLayout = HelmfileInfo | OverrideFolderInfo | StandaloneInfo | CustomInfo;
 
-function findChartYamlPaths(folder: vscode.WorkspaceFolder): string[] {
+/** Find all chart dirs (containing Chart.yaml) in the workspace folder. */
+export function findChartYamlPaths(folder: vscode.WorkspaceFolder): string[] {
   const results: string[] = [];
   const rootPath = folder.uri.fsPath;
 
@@ -51,9 +52,9 @@ function findChartYamlPaths(folder: vscode.WorkspaceFolder): string[] {
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'charts') {
-            continue; // Skip deps and downloaded charts
-          }
+          if (entry.name === 'node_modules' || entry.name === '.git') continue;
+          // Skip charts/ only when it's a chart's deps folder (parent has Chart.yaml)
+          if (entry.name === 'charts' && fs.existsSync(path.join(dir, 'Chart.yaml'))) continue;
           walk(fullPath);
         } else if (entry.name === 'Chart.yaml') {
           results.push(path.dirname(fullPath));
@@ -68,6 +69,28 @@ function findChartYamlPaths(folder: vscode.WorkspaceFolder): string[] {
   return results;
 }
 
+/** Find the chart dir that contains docPath (longest match if nested). Returns null if doc is not in any chart. */
+export function getContainingChart(
+  folder: vscode.WorkspaceFolder,
+  docPath: string
+): string | null {
+  const chartDirs = findChartYamlPaths(folder);
+  const docPathNorm = path.normalize(docPath);
+  const sep = path.sep;
+
+  let best: string | null = null;
+  let bestLen = 0;
+  for (const chartDir of chartDirs) {
+    const chartDirNorm = path.normalize(chartDir);
+    const prefix = chartDirNorm.endsWith(sep) ? chartDirNorm : chartDirNorm + sep;
+    if (docPathNorm.startsWith(prefix) && prefix.length > bestLen) {
+      best = chartDir;
+      bestLen = prefix.length;
+    }
+  }
+  return best;
+}
+
 export function detectLayout(
   folder: vscode.WorkspaceFolder,
   config: {
@@ -78,13 +101,15 @@ export function detectLayout(
     environments?: string[];
     valuesBasePath?: string;
     valuesFilePattern?: string;
-  }
+  },
+  /** When provided, detect layout for this specific chart. Used for multi-chart workspaces. */
+  forChartPath?: string
 ): ResolvedLayout | null {
   const rootPath = folder.uri.fsPath;
   const rootUri = folder.uri;
 
-  // 1. Custom with explicit chartPath - no workspace walk
-  if (config.environments?.length && config.valuesFilePattern && config.chartPath) {
+  // 1. Custom with explicit chartPath - no workspace walk (skip when forChartPath targets a different chart)
+  if (!forChartPath && config.environments?.length && config.valuesFilePattern && config.chartPath) {
     const chartPathFull = path.join(rootPath, config.chartPath);
     if (fs.existsSync(path.join(chartPathFull, 'Chart.yaml'))) {
       const chartPathRel = path.relative(rootPath, chartPathFull).replace(/\\/g, '/');
@@ -110,34 +135,45 @@ export function detectLayout(
         path.dirname(helmfileFullPath),
         helmfile.chartPath
       );
-      if (fs.existsSync(path.join(helmfileChartPath, 'Chart.yaml'))) {
-        const helmfileChartPathRel = path.relative(rootPath, helmfileChartPath).replace(/\\/g, '/');
-        return {
-          layout: 'helmfile',
-          rootPath,
-          rootUri,
-          workspaceFolder: folder,
-          helmfilePath: helmfileFullPath,
-          chartPath: helmfileChartPathRel,
-          environments: helmfile.environments,
-          valueFileTemplates: helmfile.valueFileTemplates,
-        };
+      const helmfileChartPathNorm = path.normalize(helmfileChartPath);
+      const forChartPathNorm = forChartPath ? path.normalize(forChartPath) : null;
+
+      // When forChartPath provided: use helmfile only if it matches
+      if (!forChartPathNorm || helmfileChartPathNorm === forChartPathNorm) {
+        if (fs.existsSync(path.join(helmfileChartPath, 'Chart.yaml'))) {
+          const helmfileChartPathRel = path.relative(rootPath, helmfileChartPath).replace(/\\/g, '/');
+          return {
+            layout: 'helmfile',
+            rootPath,
+            rootUri,
+            workspaceFolder: folder,
+            helmfilePath: helmfileFullPath,
+            chartPath: helmfileChartPathRel,
+            environments: helmfile.environments,
+            valueFileTemplates: helmfile.valueFileTemplates,
+          };
+        }
       }
     }
   }
 
-  // 3. Remaining layouts need findChartYamlPaths
-  const chartDirs = findChartYamlPaths(folder);
-  if (chartDirs.length === 0) return null;
-
+  // 3. Remaining layouts: use forChartPath if provided, else find first chart
   let chartPath: string;
-  if (config.chartPath) {
-    chartPath = path.join(rootPath, config.chartPath);
-    if (!fs.existsSync(path.join(chartPath, 'Chart.yaml'))) {
+  if (forChartPath) {
+    chartPath = path.normalize(forChartPath);
+    if (!fs.existsSync(path.join(chartPath, 'Chart.yaml'))) return null;
+  } else {
+    const chartDirs = findChartYamlPaths(folder);
+    if (chartDirs.length === 0) return null;
+
+    if (config.chartPath) {
+      chartPath = path.join(rootPath, config.chartPath);
+      if (!fs.existsSync(path.join(chartPath, 'Chart.yaml'))) {
+        chartPath = chartDirs[0];
+      }
+    } else {
       chartPath = chartDirs[0];
     }
-  } else {
-    chartPath = chartDirs[0];
   }
   const chartPathRel = path.relative(rootPath, chartPath).replace(/\\/g, '/');
 
