@@ -1,8 +1,8 @@
 # Helm Values Navigator
 
-VS Code extension for inspecting Helm values across environments. Hover over `.Values` references to see resolved values per environment; hover over `include` calls to see template definitions. Orphan diagnostics for unresolved refs and unused keys.
+VS Code extension for inspecting Helm values across environments. Hover, go-to-definition, and completion for `.Values` references; template definition hover and go-to-definition for `include` calls. Orphan diagnostics for unresolved refs and unused keys.
 
-![Screenshot](https://github.com/moon-hex/helm-values-navigator/blob/main/images/screenshot.png?raw=true)
+![Screenshot](https://raw.githubusercontent.com/moon-hex/helm-values-navigator/main/images/screenshot.png)
 
 ## Features
 
