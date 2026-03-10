@@ -53,8 +53,6 @@ export function findChartYamlPaths(folder: vscode.WorkspaceFolder): string[] {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (entry.name === 'node_modules' || entry.name === '.git') continue;
-          // Skip charts/ only when it's a chart's deps folder (parent has Chart.yaml)
-          if (entry.name === 'charts' && fs.existsSync(path.join(dir, 'Chart.yaml'))) continue;
           walk(fullPath);
         } else if (entry.name === 'Chart.yaml') {
           results.push(path.dirname(fullPath));
