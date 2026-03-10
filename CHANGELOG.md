@@ -7,6 +7,7 @@ All notable changes to Helm Values Navigator will be documented in this file.
 ### Added
 
 - **Go to definition**: Ctrl+click (or F12) on `.Values.x.y.z` in templates → jumps to the key in values files. Ctrl+click on `{{ include "template.name" . }}` → jumps to the `define` block. When a value is defined in multiple files (base + overrides), all locations are returned for peek definition.
+- **Completion**: Type `.` after `.Values` or `"` inside `include "` → suggests value paths from resolved values and template names. Reuses the hover cache.
 
 ## [0.1.8] - 2025-03-09
 

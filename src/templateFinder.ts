@@ -98,6 +98,43 @@ export function findTemplateDefinition(
 }
 
 /**
+ * List all template names defined in the templates directory. For completion.
+ */
+export function listTemplateNames(templatesDir: string): string[] {
+  const ext = ['.yaml', '.yml', '.tpl'];
+  const names = new Set<string>();
+
+  function walk(dir: string): void {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== 'charts') {
+            walk(fullPath);
+          }
+        } else if (ext.some((e) => entry.name.endsWith(e))) {
+          try {
+            const content = fs.readFileSync(fullPath, 'utf8');
+            const matches = content.matchAll(DEFINE_REGEX);
+            for (const m of matches) {
+              if (m[1]) names.add(m[1]);
+            }
+          } catch {
+            // Skip
+          }
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  walk(templatesDir);
+  return [...names].sort();
+}
+
+/**
  * Find the file and range of a template define. For go-to-definition.
  */
 export function findTemplateDefinitionLocation(

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { detectLayout } from './layout';
+import { registerCompletionProvider } from './completionProvider';
 import { registerDefinitionProvider } from './definitionProvider';
 import { registerHoverProvider } from './hoverProvider';
 import { registerOrphanDiagnostics } from './orphanDiagnostics';
@@ -74,6 +75,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerHoverProvider(context);
   registerDefinitionProvider(context);
+  registerCompletionProvider(context);
   registerCacheInvalidation(context); // Before orphan diagnostics so config change clears cache first
   registerOrphanDiagnostics(context);
 
